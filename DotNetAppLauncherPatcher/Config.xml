@@ -1,0 +1,11 @@
+<config>
+    <steam game-id="882710"/>
+    <target path="C:\Program Files (x86)\Steam\steamapps\common\TouHou Makuka Sai ~ Fantastic Danmaku Festival\THMHJ.exe"/>
+    <resource 
+        path="C:\Home\Programming\Self\DotNetInjectAndHookDemonstration"
+        debug-path="C:\Home\Programming\Self\DotNetInjectAndHookDemonstration\DebugResource"
+    />
+    <versions>
+        <v1.05en checksum="582CBCE194163E7767344EC6136E9AB0DC7B87EBEFDCF694C3F97F54F5B102AB" size="921600"/>
+    </versions>
+</config>
