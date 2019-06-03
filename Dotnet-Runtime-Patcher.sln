@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.28307.645
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dotnet-Runtime-Patcher", "DotNetAppLauncherPatcher\Dotnet-Runtime-Patcher.csproj", "{48705B2B-C19E-482E-839F-7011803436AD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dotnet-Runtime-Patcher", "Main\Dotnet-Runtime-Patcher.csproj", "{48705B2B-C19E-482E-839F-7011803436AD}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Harmony", "Harmony\Harmony\Harmony.csproj", "{337D58FF-E5AB-4B91-AAEB-E0B349E70554}"
 EndProject

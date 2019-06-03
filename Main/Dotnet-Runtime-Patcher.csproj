@@ -6,8 +6,8 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{48705B2B-C19E-482E-839F-7011803436AD}</ProjectGuid>
     <OutputType>WinExe</OutputType>
-    <RootNamespace>DotNetAppLauncherPatcher</RootNamespace>
-    <AssemblyName>DotNetAppLauncherPatcher</AssemblyName>
+    <RootNamespace>Launcher</RootNamespace>
+    <AssemblyName>Dotnet-Runtime-Patcher</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
@@ -31,6 +31,9 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup>
+    <StartupObject>Launcher.Launcher</StartupObject>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Sigil, Version=4.7.0.0, Culture=neutral, PublicKeyToken=2d06c3494341c8ab, processorArchitecture=MSIL">
