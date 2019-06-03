@@ -82,9 +82,6 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Config.xml" />
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="..\Harmony\Harmony\Harmony.csproj">
       <Project>{337d58ff-e5ab-4b91-aaeb-e0b349e70554}</Project>
       <Name>Harmony</Name>
