@@ -1,6 +1,7 @@
 //css_args -provider:%CSSCRIPT_DIR%\lib\CSSRoslynProvider.dll
 //css_ref %CSSCRIPT_DIR%\lib\Bin\Roslyn\System.ValueTuple.dll
 //css_nuget Crc32.NET
+//css_nuget Newtonsoft.Json
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -9,13 +10,12 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Force.Crc32;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace MakeFileList {
    class Program {
-      static string DirPath = Directory.GetCurrentDirectory() + '\\';
-      static string FilterFilePath = Path.Combine(DirPath, ".fileignore");
-      static string OutputFilePath = Path.Combine(DirPath, "files.jsonc");
-      static void Main(string[] args) {
+      static void CreateFileList(string DirPath, string FilterFilePath, string OutputFilePath) {
          var filters = File.ReadAllLines(FilterFilePath)
             .Concat(new string[] { @"files\.jsonc" })
             .Select(str => str.Trim())
@@ -40,6 +40,15 @@ namespace MakeFileList {
          }
          output.Append("}");
          File.WriteAllText(OutputFilePath, output.ToString(), Encoding.UTF8);
+      }
+      static void Main(string[] args) {
+         var serverCfgPath = @"server.jsonc";
+         var serverCfg = JObject.Parse(File.ReadAllText(serverCfgPath));
+         foreach (JProperty package in serverCfg["packages"]) {
+            Console.WriteLine("Update file list for: " + package.Name);
+            var DirPath = Path.Combine(Directory.GetCurrentDirectory(), package.Name) + '\\';
+            CreateFileList(DirPath, Path.Combine(DirPath, ".fileignore"), Path.Combine(DirPath, "files.jsonc"));
+         }
       }
    }
 }
