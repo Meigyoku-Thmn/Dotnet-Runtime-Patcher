@@ -14,18 +14,22 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Launcher {
+   public class TargetInfo {
+      public string Hash;
+      public long Size;
+      public TargetInfo(string Hash, long Size) {
+         this.Hash = Hash; this.Size = Size;
+      }
+   }
    public static class Helper {
       public static Type[] TypeL(params Type[] types) {
          return types;
       }
-      public static dynamic GetChecksumAndSize(string file) {
+      public static TargetInfo GetChecksumAndSize(string file) {
          using (FileStream stream = File.OpenRead(file)) {
             var sha = new SHA256Managed();
             byte[] checksum = sha.ComputeHash(stream);
-            return new {
-               Hash = BitConverter.ToString(checksum).Replace("-", String.Empty),
-               Size = stream.Length,
-            };
+            return new TargetInfo(BitConverter.ToString(checksum).Replace("-", String.Empty), stream.Length);
          }
       }
       public static Delegate MakeDelegate(this MethodInfo method, object target = null) {
