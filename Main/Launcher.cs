@@ -71,13 +71,13 @@ namespace Launcher {
 
          var mainScriptPath = Path.Combine(RootDirectory, package, patchName, "Main.cs");
          var script = new AsmHelper(CSScript.LoadFile(mainScriptPath, null, DebugBuild));
+         Directory.SetCurrentDirectory(TargetDirectory);
          script.GetStaticMethod("DotnetPatching.Config.OnInit")();
          var detourList = (List<PatchTuple>)script.GetStaticMethod("DotnetPatching.Detours.OnSetup")();
          var transpilerList = (List<TranspilerTuple>)script.GetStaticMethod("DotnetPatching.Transpiler.OnSetup")();
          SetupHook(detourList);
          SetupTranspiler(transpilerList);
 
-         Directory.SetCurrentDirectory(TargetDirectory);
          TargetAssembly.EntryPoint.Invoke(null, new object[] { });
       }
       static dynamic __currentReentrantMethod;
