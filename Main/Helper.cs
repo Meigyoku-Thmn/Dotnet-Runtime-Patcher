@@ -40,5 +40,13 @@ namespace Launcher {
          var delDecltype = Expression.GetDelegateType(tArgs.ToArray());
          return method.CreateDelegate(delDecltype, target);
       }
+      public static bool IsValidPath(this string path) {
+         bool bOk = false;
+         try { new FileInfo(path); bOk = true; }
+         catch (ArgumentException) { }
+         catch (System.IO.PathTooLongException) { }
+         catch (NotSupportedException) { }
+         return bOk;
+      }
    }
 }
