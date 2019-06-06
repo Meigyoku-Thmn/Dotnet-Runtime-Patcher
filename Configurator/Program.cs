@@ -125,7 +125,7 @@ namespace Configurator {
          var defaultShortcutName = $"{targetVersion["name"]}_{selectedPackage.Name}";
          var exeCfg = new JObject();
          exeCfg["targetPath"] = targetPath;
-         exeCfg["package"] = $"\"{selectedPackage.Id}/{selectedPackage.Name}\""; ;
+         exeCfg["package"] = $"{selectedPackage.Id}/{selectedPackage.Name}"; ;
          File.WriteAllText(Path.Combine(rootPath, defaultShortcutName + ".jsonc"), exeCfg.ToString());
 
          // STEP 5: create shortcut on desktop

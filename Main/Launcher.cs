@@ -16,10 +16,11 @@ using CSScriptLibrary;
 using CSScriptNativeApi;
 using System.Reflection.Emit;
 using Sigil;
+using System.Diagnostics;
 
 namespace Launcher {
-   using PatchTuple = ValueTuple<Type, string, Type[], string>;
-   using TranspilerTuple = ValueTuple<Type, string, Type[], string>;
+   using PatchTuple = ValueTuple<Type, string, Type[], Type, string, Type[]>;
+   using TranspilerTuple = ValueTuple<Type, string, Type[], Type, string, Type[]>;
    public partial class Launcher {
       static public HarmonyInstance Harmony { get; private set; }
       static public Assembly TargetAssembly { get; private set; }
@@ -45,7 +46,7 @@ namespace Launcher {
          if (package == null) {
             MessageBox.Show("Không hề có thiết lập gói!"); return;
          }
-         var versionsCfg = JObject.Parse(File.ReadAllText(Path.Combine(RootDirectory, package)));
+         var versionsCfg = JObject.Parse(File.ReadAllText(Path.Combine(RootDirectory, package, "versions.jsonc")));
          var targetInfo = GetChecksumAndSize(targetPath);
          var version = versionsCfg[targetInfo.Hash];
          if (version == null || (uint)version["size"] != targetInfo.Size) {
@@ -64,7 +65,11 @@ namespace Launcher {
             }
          );
          Harmony = HarmonyInstance.Create("THFDF_HACK_VIETNAMESE");
+#if DEBUG
          var DebugBuild = true;
+#else
+         var DebugBuild = false;
+#endif
          CSScript.GlobalSettings.UseAlternativeCompiler = CodeDom_Roslyn.LocateRoslynCSSProvider();
          CSScript.GlobalSettings.RoslynDir = CodeDom_Roslyn.LocateRoslynCompilers();
          CSScript.EvaluatorConfig.DebugBuild = DebugBuild;
@@ -73,12 +78,14 @@ namespace Launcher {
          var script = new AsmHelper(CSScript.LoadFile(mainScriptPath, null, DebugBuild));
          Directory.SetCurrentDirectory(TargetDirectory);
          script.GetStaticMethod("DotnetPatching.Config.OnInit")();
-         var detourList = (List<PatchTuple>)script.GetStaticMethod("DotnetPatching.Detours.OnSetup")();
-         var transpilerList = (List<TranspilerTuple>)script.GetStaticMethod("DotnetPatching.Transpiler.OnSetup")();
+         var OnSetup = script.GetStaticMethod("DotnetPatching.Detours.OnSetup");
+         var detourList = (List<PatchTuple>)OnSetup();
+         OnSetup = script.GetStaticMethod("DotnetPatching.Transpilers.OnSetup");
+         var transpilerList = (List<TranspilerTuple>)OnSetup();
          SetupHook(detourList);
          SetupTranspiler(transpilerList);
-
-         TargetAssembly.EntryPoint.Invoke(null, new object[] { });
+        
+         TargetAssembly.EntryPoint.Invoke(null, new object[] { new string[] { } });
       }
       static dynamic __currentReentrantMethod;
       static List<dynamic> states = new List<dynamic>();
@@ -108,7 +115,7 @@ namespace Launcher {
                AccessTools.Method(config.Item1, config.Item2, config.Item3) :
                AccessTools.Constructor(config.Item1, config.Item3) as MethodBase;
             var prefix = AccessTools.Method(typeof(Launcher), nameof(PrefixFactory));
-            var postfix = AccessTools.Method(typeof(Launcher), config.Item4);
+            var postfix = AccessTools.Method(config.Item4, config.Item5, config.Item6);
             __currentReentrantMethod = Harmony.Patch(original).MakeDelegate();
             Harmony.Patch(original, new HarmonyMethod(prefix), new HarmonyMethod(postfix));
          }
@@ -118,7 +125,7 @@ namespace Launcher {
             var original = config.Item2 != ".ctor" ?
                AccessTools.Method(config.Item1, config.Item2, config.Item3) :
                AccessTools.Constructor(config.Item1, config.Item3) as MethodBase;
-            var transpiler = AccessTools.Method(typeof(Launcher), config.Item4);
+            var transpiler = AccessTools.Method(config.Item4, config.Item5, config.Item6);
             Harmony.Patch(original, null, null, new HarmonyMethod(transpiler));
          }
       }
