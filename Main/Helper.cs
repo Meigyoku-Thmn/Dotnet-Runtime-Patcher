@@ -12,6 +12,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 
 namespace Launcher {
    public class TargetInfo {
@@ -22,6 +23,16 @@ namespace Launcher {
       }
    }
    public static class Helper {
+      public static void Log(this TextWriter log, string str = null) {
+         DateTime now = DateTime.Now;
+         Console.Write($"[{now.ToString("s")}] ");
+         log.Write($"[{now.ToString("s")}] ");
+         Console.WriteLine(str);
+         log.WriteLine(str);
+      }
+      public static Uri Concat(this Uri baseUri, params string[] uris) {
+         return new Uri(baseUri, Path.Combine(uris));
+      }
       public static Type[] TypeL(params Type[] types) {
          return types;
       }
@@ -39,6 +50,15 @@ namespace Launcher {
          tArgs.Add(method.ReturnType);
          var delDecltype = Expression.GetDelegateType(tArgs.ToArray());
          return method.CreateDelegate(delDecltype, target);
+      }
+      public static Timer SetTimeout(Action<object, EventArgs> handler, int delay) {
+         var timer = new Timer();
+         timer.Interval = delay;
+         timer.Enabled = true;
+         timer.Tick += new EventHandler((sender, e) => timer.Stop());
+         timer.Tick += new EventHandler(handler);
+         timer.Start();
+         return timer;
       }
       public static bool IsValidPath(this string path) {
          bool bOk = false;
