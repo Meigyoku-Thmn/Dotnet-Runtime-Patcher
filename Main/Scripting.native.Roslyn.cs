@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Configuration;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -8,12 +9,19 @@ using CSScriptLibrary;
 
 namespace CSScriptNativeApi {
    public class CodeDom_Roslyn {
-      static string Root { get { return Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location); } }
+      static string Root = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+      static string Lib = Path.Combine(Root, "Lib");
       public static string LocateRoslynCompilers() {
-         return @"C:\Home\Programming\Self\Game-Visual Novel Translation\Touhou Fantastic Danmaku Festival\Dotnet-Runtime-Patcher\packages\Microsoft.Net.Compilers.2.2.0\tools";
+#if DEBUG
+         return Path.GetFullPath(
+            Environment.ExpandEnvironmentVariables(
+               @"%USERPROFILE%\.nuget\packages\microsoft.net.compilers\2.2.0\tools"));
+#else
+         return Path.Combine(Root, "RoslynCompiler");
+#endif
       }
       public static string LocateRoslynCSSProvider() {
-         return Path.Combine(Root, "CSSRoslynProvider.dll");
+         return Path.Combine(Lib, "CSSRoslynProvider.dll");
       }
    }
 }

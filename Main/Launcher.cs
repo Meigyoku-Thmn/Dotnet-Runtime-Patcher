@@ -19,6 +19,7 @@ using Sigil;
 using System.Diagnostics;
 using System.Threading;
 using System.Globalization;
+using System.Configuration;
 
 namespace Launcher {
    using PatchTuple = ValueTuple<Type, string, Type[], Type, string, Type[]>;
@@ -31,27 +32,34 @@ namespace Launcher {
       static public string TargetVersion { get; private set; }
       static public string TargetDirectory { get; private set; }
       static public string RootDirectory { get; private set; }
+      static public string ProfileDirectory { get; private set; }
+      static public string PackageDirectory { get; private set; }
       static public string CurrentVersion { get; private set; }
       static internal StreamWriter log;
-      static Launcher() {
-         CurrentVersion = "1.0.0";
-      }
+      static readonly string LogFilePath = ConfigurationManager.AppSettings["LogFilePath"];
       static void Main(string[] args) {
          Application.EnableVisualStyles();
          Application.SetCompatibleTextRenderingDefault(false);
+         if (args.Length == 0) {
+            MessageBox.Show("Bạn phải cung cấp tên profile vào đối số cho Launcher này!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+         }
+         CurrentVersion = Application.ProductVersion;
          AppDomain.CurrentDomain.AssemblyResolve += ResolveEventHandler;
          AppDomain.CurrentDomain.UnhandledException += new UnhandledExceptionEventHandler(Unhandled);
          Console.OutputEncoding = Encoding.Unicode;
          Console.InputEncoding = Encoding.Unicode;
-         RootDirectory = Path.GetDirectoryName(Assembly.GetEntryAssembly().Location);
-         log = new StreamWriter(File.Open(Path.Combine(RootDirectory, "launcher.log"), FileMode.Create, FileAccess.Write, FileShare.Read), Encoding.UTF8);
+         RootDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+         log = new StreamWriter(File.Open(Path.Combine(RootDirectory, LogFilePath), FileMode.Create, FileAccess.Write, FileShare.Read), Encoding.UTF8);
+         PackageDirectory = Path.Combine(RootDirectory, "Pkg");
+         ProfileDirectory = Path.Combine(RootDirectory, "Prfl");
          DateTime now = DateTime.Now;
          log.Log(now.ToString("F", new CultureInfo("en-US")));
          log.Log("Dotnet Runtime Patcher by Meigyoku Thmn");
          log.Log($"Version {CurrentVersion}");
 
-         log.Log($"Read {Path.Combine(RootDirectory, args[0] + ".jsonc")}");
-         var exeCfg = JObject.Parse(File.ReadAllText(Path.Combine(RootDirectory, args[0] + ".jsonc")));
+         log.Log($"Read {Path.Combine(ProfileDirectory, args[0] + ".jsonc")}");
+         var exeCfg = JObject.Parse(File.ReadAllText(Path.Combine(ProfileDirectory, args[0] + ".jsonc")));
          var targetPath = (string)exeCfg["targetPath"];
          if (targetPath == null) {
             log.Log($"Target path doesn't exist in profile!");
@@ -63,8 +71,8 @@ namespace Launcher {
             log.Log($"Package name in profile is missing!");
             MessageBox.Show("Không hề có thiết lập gói!"); return;
          }
-         log.Log($"Read {Path.Combine(RootDirectory, package, "versions.jsonc")}");
-         var versionsCfg = JObject.Parse(File.ReadAllText(Path.Combine(RootDirectory, package, "versions.jsonc")));
+         log.Log($"Read {Path.Combine(PackageDirectory, package, "versions.jsonc")}");
+         var versionsCfg = JObject.Parse(File.ReadAllText(Path.Combine(PackageDirectory, package, "versions.jsonc")));
          var targetInfo = GetChecksumAndSize(targetPath);
          var version = versionsCfg[targetInfo.Hash];
          if (version == null || (uint)version["size"] != targetInfo.Size) {
@@ -79,7 +87,7 @@ namespace Launcher {
             log.Log("patchName is null");
          TargetIcon = Icon.ExtractAssociatedIcon(targetPath);
          TargetAssembly = Assembly.LoadFrom(targetPath);
-         var referenceAssemblies = TargetAssembly.GetReferencedAssemblies().ToArray();
+         var referenceAssemblies = TargetAssembly.GetReferencedAssemblies();
          ReferenceAssemblies = referenceAssemblies.Aggregate(
             new SortedDictionary<string, Assembly>(),
             (acc, e) => {
@@ -88,7 +96,7 @@ namespace Launcher {
             }
          );
          log.Log("Create Harmony Instance.");
-         Harmony = HarmonyInstance.Create("THFDF_HACK_VIETNAMESE");
+         Harmony = HarmonyInstance.Create("HARMONY_RUNTIME_PATCHER_INSTANCE");
 #if DEBUG
          var DebugBuild = true;
 #else
@@ -102,7 +110,7 @@ namespace Launcher {
          var tmp = package.Split('/');
          var id = tmp[0];
          var packageName = tmp[1];
-         var mainScriptPath = Path.Combine(RootDirectory, package, patchName, "Main.cs");
+         var mainScriptPath = Path.Combine(PackageDirectory, package, patchName, "Main.cs");
          log.Log("Begin loading patching script...");
          log.Log($"DebugMode = {DebugBuild}");
          log.Log($"Load {mainScriptPath}");
@@ -121,7 +129,7 @@ namespace Launcher {
          log.Log("Begin setting up Transpilers to modify functions...");
          SetupTranspiler(transpilerList);
          log.Log("Run Updater...");
-         var updateInfo = RunUpdater(RootDirectory, id, packageName, patchName);
+         var updateInfo = RunUpdater(id, packageName, patchName);
          log.Log("Launch the target executable...");
          TargetAssembly.EntryPoint.Invoke(null, new object[] { new string[] { } });
          log.Log("Enable updating.");
@@ -185,15 +193,16 @@ namespace Launcher {
       private static void Unhandled(object sender, UnhandledExceptionEventArgs args) {
          log.Log(args.ExceptionObject.ToString());
          log.Close();
-         MessageBox.Show(args.ExceptionObject.ToString(), "Error", MessageBoxButtons.OK, MessageBoxIcon.Hand);
+         MessageBox.Show(args.ExceptionObject.ToString(), "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Hand);
       }
       private static Assembly ResolveEventHandler(object sender, ResolveEventArgs args) {
          var assemblies = AppDomain.CurrentDomain.GetAssemblies();
          Assembly result = assemblies.Where(a => args.Name.Equals(a.FullName)).FirstOrDefault();
+
          return result;
       }
-      static UpdaterInfo RunUpdater(string rootPath, string id, string packageName, string patchName) {
-         var updateForm = new UpdateForm(rootPath, id, packageName, patchName);
+      static UpdaterInfo RunUpdater(string id, string packageName, string patchName) {
+         var updateForm = new UpdateForm(id, packageName, patchName);
          Thread t = new Thread(() => Application.Run(updateForm));
          t.Start();
          return new UpdaterInfo(updateForm, t);

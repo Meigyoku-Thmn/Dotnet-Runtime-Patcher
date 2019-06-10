@@ -25,7 +25,6 @@ namespace Launcher {
    public static class Helper {
       public static void Log(this TextWriter log, string str = null) {
          DateTime now = DateTime.Now;
-         Console.Write($"[{now.ToString("s")}] ");
          log.Write($"[{now.ToString("s")}] ");
          Console.WriteLine(str);
          log.WriteLine(str);

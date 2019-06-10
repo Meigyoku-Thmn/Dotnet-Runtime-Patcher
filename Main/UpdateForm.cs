@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Configuration;
 using System.Data;
 using System.Drawing;
 using System.Globalization;
@@ -14,22 +15,22 @@ using System.Windows.Forms;
 using static Launcher.Helper;
 namespace Launcher {
    public partial class UpdateForm : Form {
+      static readonly string LogFilePath = ConfigurationManager.AppSettings["UpdaterLogFilePath"];
       internal StreamWriter log;
-      public UpdateForm(string rootPath, string id, string packageName, string patchName) {
-         log = new StreamWriter(File.Open(Path.Combine(Launcher.RootDirectory, "updater.log"), FileMode.Create, FileAccess.Write, FileShare.Read), Encoding.UTF8);
+      public UpdateForm(string id, string packageName, string patchName) {
+         log = new StreamWriter(File.Open(Path.Combine(Launcher.RootDirectory, LogFilePath), FileMode.Create, FileAccess.Write, FileShare.Read), Encoding.UTF8);
          DateTime now = DateTime.Now;
          log.Log(now.ToString("F", new CultureInfo("en-US")));
          log.Log("Dotnet Runtime Patcher by Meigyoku Thmn");
          log.Log($"Version {Launcher.CurrentVersion}");
-         this.rootPath = rootPath;
          this.packageName = packageName;
          this.patchName = patchName;
          this.id = id;
          log.Log($"Package Name = {packageName}");
          log.Log($"Patch Name = {patchName}");
          log.Log($"Id = {id}");
-         oldFilesPath = Path.Combine(rootPath, id, packageName, "files.jsonc");
-         urlFilePath = Path.Combine(rootPath, id, "urls.jsonc");
+         oldFilesPath = Path.Combine(Launcher.PackageDirectory, id, packageName, "files.jsonc");
+         urlFilePath = Path.Combine(Launcher.PackageDirectory, id, "urls.jsonc");
          wc = new WebClient { Encoding = Encoding.UTF8 };
          InitializeComponent();
       }
@@ -40,7 +41,6 @@ namespace Launcher {
       }
       WebClient wc;
       string id;
-      string rootPath;
       string patchName;
       string packageName;
       string oldFilesPath;
@@ -83,7 +83,7 @@ namespace Launcher {
                log.Log($"Read {oldFilesPath}");
                oldFiles = JObject.Parse(File.ReadAllText(oldFilesPath));
             }
-            catch (FileNotFoundException) {
+            catch (Exception ex) when (ex is FileNotFoundException || ex is DirectoryNotFoundException) {
                log.Log("Local file list doesn't exist.");
                oldFiles = new JObject();
             }
@@ -97,7 +97,7 @@ namespace Launcher {
             }
             if (verFile_oldChecksum == null || (uint)verFile_newChecksum != (uint)verFile_oldChecksum) {
                var fileUri = new Uri((string)serverUrl).Concat(packageName, "versions.jsonc");
-               var filePath = Path.Combine(rootPath, id, packageName, "versions.jsonc");
+               var filePath = Path.Combine(Launcher.PackageDirectory, id, packageName, "versions.jsonc");
                log.Log("Found new versions.jsonc");
                pickedUrl.Add((fileUri.ToString(), filePath));
             }
@@ -107,7 +107,7 @@ namespace Launcher {
                   continue;
                }
                var fileUri = new Uri((string)serverUrl).Concat(packageName, file.Name);
-               var filePath = Path.Combine(rootPath, id, packageName, file.Name);
+               var filePath = Path.Combine(Launcher.PackageDirectory, id, packageName, file.Name);
                log.Log($"Found new {file.Name}");
                pickedUrl.Add((fileUri.ToString(), filePath));
             }
@@ -116,7 +116,7 @@ namespace Launcher {
          catch (Exception err) {
             log.Log(err.ToString());
             state = State.Error;
-            lblMessage.Text = "Có lỗi đã xảy ra, xem file updater.log để biết chi tiết!";
+            lblMessage.Text = $"Có lỗi đã xảy ra, xem file {LogFilePath} để biết chi tiết!";
          }
       }
 
@@ -168,6 +168,7 @@ namespace Launcher {
                }
             }
             log.Log($"Write new {oldFilesPath}");
+            Directory.CreateDirectory(Path.GetDirectoryName(oldFilesPath));
             File.WriteAllText(oldFilesPath, filesCfgStr);
             lblMessage.Text = "Đã cập nhật các file có sự thay đổi!";
             SetTimeout((sender, e) => Close(), 5000);
@@ -176,7 +177,7 @@ namespace Launcher {
          catch (Exception err) {
             log.Log(err.ToString());
             state = State.Error;
-            lblMessage.Text = "Có lỗi đã xảy ra, xem file updater.log để biết chi tiết!";
+            lblMessage.Text = $"Có lỗi đã xảy ra, xem file {LogFilePath} để biết chi tiết!";
          }
       }
 

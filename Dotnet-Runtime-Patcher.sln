@@ -9,6 +9,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Harmony", "Harmony\Harmony\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Configurator", "Configurator\Configurator.csproj", "{74231452-0968-4154-9E55-3ACD2A876C07}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReleaseMaker", "ReleaseMaker\ReleaseMaker.csproj", "{3CC7D7F5-770F-4EBC-AC3C-98ECFBBF6D59}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,10 @@ Global
 		{74231452-0968-4154-9E55-3ACD2A876C07}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{74231452-0968-4154-9E55-3ACD2A876C07}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{74231452-0968-4154-9E55-3ACD2A876C07}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3CC7D7F5-770F-4EBC-AC3C-98ECFBBF6D59}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3CC7D7F5-770F-4EBC-AC3C-98ECFBBF6D59}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3CC7D7F5-770F-4EBC-AC3C-98ECFBBF6D59}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3CC7D7F5-770F-4EBC-AC3C-98ECFBBF6D59}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

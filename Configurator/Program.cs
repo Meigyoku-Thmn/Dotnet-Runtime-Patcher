@@ -3,6 +3,7 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Configuration;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -14,7 +15,8 @@ using System.Windows.Forms;
 using static Launcher.Helper;
 namespace Configurator {
    public class Program {
-      static readonly string SystemCfgUrl = "https://raw.githubusercontent.com/Meigyoku-Thmn/Dotnet-Runtime-Patcher/master/system.jsonc";
+      static readonly string SystemCfgUrl = ConfigurationManager.AppSettings["SystemCfgUrl"];
+      static readonly string LogFilePath = ConfigurationManager.AppSettings["LogFilePath"];
       class Package {
          public string Name;
          public string Id;
@@ -28,13 +30,15 @@ namespace Configurator {
       static StreamWriter log;
       [STAThread]
       public static void Main(string[] args) {
-         var rootPath = Path.GetDirectoryName(Assembly.GetEntryAssembly().Location);
-         new StreamWriter(File.Open(Path.Combine(rootPath, "configurator.log"), FileMode.Create, FileAccess.Write, FileShare.Read), Encoding.UTF8);
+         var rootPath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+         log = new StreamWriter(File.Open(Path.Combine(rootPath, LogFilePath), FileMode.Create, FileAccess.Write, FileShare.Read), Encoding.UTF8);
+         var localPackageDirPath = Path.Combine(rootPath, "Pkg");
+         var profileDirPath = Path.Combine(rootPath, "Prfl");
          AppDomain.CurrentDomain.UnhandledException += new UnhandledExceptionEventHandler(Unhandled);
          DateTime now = DateTime.Now;
          log.Log(now.ToString("F", new CultureInfo("en-US")));
-         log.Log("Dotnet Runtime Patcher by Meigyoku Thmn");
-         log.Log($"Version {Launcher.Launcher.CurrentVersion}");
+         log.Log("Configurator for Dotnet Runtime Patcher by Meigyoku Thmn");
+         log.Log($"Version {Application.ProductVersion}");
          Console.OutputEncoding = Encoding.Unicode;
          var wc = new WebClient { Encoding = Encoding.UTF8 };
          var desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
@@ -116,13 +120,13 @@ namespace Configurator {
          var filesCfgStr = wc.DownloadString(filesUri);
          var filesCfg = JObject.Parse(filesCfgStr);
          var files = filesCfg.Children<JProperty>().Where(file => file.Name.IndexOf(patchRoot, 0, patchRoot.Length) != -1);
-         var oldFilesPath = Path.Combine(rootPath, selectedPackage.Id, selectedPackage.Name, "files.jsonc");
+         var oldFilesPath = Path.Combine(localPackageDirPath, selectedPackage.Id, selectedPackage.Name, "files.jsonc");
          JObject oldFiles;
          try {
             log.Log($"Read local file list: {oldFilesPath}");
             oldFiles = JObject.Parse(File.ReadAllText(oldFilesPath));
          }
-         catch (FileNotFoundException) {
+         catch (Exception ex) when (ex is FileNotFoundException || ex is DirectoryNotFoundException) {
             log.Log("Local file list doesn't exist.");
             oldFiles = new JObject();
          }
@@ -135,7 +139,7 @@ namespace Configurator {
                continue;
             }
             var fileUri = new Uri(selectedPackage.ServerUrl).Concat(selectedPackage.Name, file.Name);
-            var filePath = Path.Combine(rootPath, selectedPackage.Id, selectedPackage.Name, file.Name);
+            var filePath = Path.Combine(localPackageDirPath, selectedPackage.Id, selectedPackage.Name, file.Name);
             log.Log(fileUri.ToString());
             Directory.CreateDirectory(Path.GetDirectoryName(filePath));
             wc.DownloadFile(fileUri, filePath);
@@ -144,14 +148,17 @@ namespace Configurator {
          log.Log($"Downloaded {writeCount} file(s)");
          log.Log($"Skipped {skipCount} file(s)");
          log.Log($"Write new file list to {oldFilesPath}");
+         Directory.CreateDirectory(Path.GetDirectoryName(oldFilesPath));
          File.WriteAllText(oldFilesPath, filesCfgStr);
-         var versionsPath = Path.Combine(rootPath, selectedPackage.Id, selectedPackage.Name, "versions.jsonc");
+         var versionsPath = Path.Combine(localPackageDirPath, selectedPackage.Id, selectedPackage.Name, "versions.jsonc");
          log.Log($"Write {versionsPath}");
+         Directory.CreateDirectory(Path.GetDirectoryName(versionsPath));
          File.WriteAllText(versionsPath, versionCfgStr);
-         var urlFilePath = Path.Combine(rootPath, selectedPackage.Id, "urls.jsonc");
+         var urlFilePath = Path.Combine(localPackageDirPath, selectedPackage.Id, "urls.jsonc");
          var urlFileCfg = new JObject();
          urlFileCfg["serverUrl"] = selectedPackage.ServerUrl;
          log.Log($"Write {urlFilePath}");
+         Directory.CreateDirectory(Path.GetDirectoryName(urlFilePath));
          File.WriteAllText(urlFilePath, urlFileCfg.ToString());
 
          // STEP 4: create config file
@@ -160,11 +167,13 @@ namespace Configurator {
          exeCfg["targetPath"] = targetPath;
          exeCfg["package"] = $"{selectedPackage.Id}/{selectedPackage.Name}";
          log.Log($"Write profile {defaultShortcutName + ".jsonc"} to root directory");
-         File.WriteAllText(Path.Combine(rootPath, defaultShortcutName + ".jsonc"), exeCfg.ToString());
+         var exeProfilePath = Path.Combine(profileDirPath, defaultShortcutName + ".jsonc");
+         Directory.CreateDirectory(Path.GetDirectoryName(exeProfilePath));
+         File.WriteAllText(exeProfilePath, exeCfg.ToString());
 
          // STEP 5: create shortcut on desktop
          log.Log("\nPlease set a name of a shortcut file that we will create on your desktop:");
-         log.Log($"(Default: {defaultShortcutName}) > ");
+         log.Log($"(Default: {defaultShortcutName})");
          var newShortcutName = Console.ReadLine().Trim();
          log.WriteLine(newShortcutName);
          if (newShortcutName.Length == 0) newShortcutName = defaultShortcutName;
@@ -175,7 +184,7 @@ namespace Configurator {
          var arguments = $"\"{defaultShortcutName}\"";
          CreateShortcut(
             Path.Combine(desktopPath, newShortcutName + ".lnk"),
-            Path.Combine(rootPath, "Dotnet-Runtime-Patcher.exe"),
+            typeof(Launcher.Helper).Assembly.Location,
             arguments,
             targetPath + ", 0"
          );
@@ -194,7 +203,10 @@ namespace Configurator {
       }
       private static void Unhandled(object sender, UnhandledExceptionEventArgs args) {
          log.Log(args.ExceptionObject.ToString());
-         log.Close(); Environment.Exit(1);
+         log.Close();
+         Console.WriteLine("Press enter key to exit.");
+         Console.ReadLine();
+         Environment.Exit(1);
       }
    }
 }
