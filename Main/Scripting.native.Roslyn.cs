@@ -18,7 +18,11 @@ namespace CSScriptNativeApi {
 #endif
       }
       public static string LocateRoslynCSSProvider() {
+#if DEBUG
+         return Path.Combine(Root, "CSSRoslynProvider.dll");
+#else         
          return Path.Combine(Lib, "CSSRoslynProvider.dll");
+#endif
       }
    }
 }

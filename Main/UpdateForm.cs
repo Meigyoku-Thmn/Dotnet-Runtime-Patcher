@@ -8,15 +8,18 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using static Launcher.Helper;
 namespace Launcher {
    public partial class UpdateForm : Form {
       static readonly string LogFilePath = ConfigurationManager.AppSettings["UpdaterLogFilePath"];
       internal StreamWriter log;
-      public UpdateForm(string id, string packageName, string patchName) {
+      public UpdateForm(string id, string packageName, string patchName, ManualResetEventSlim mres) {
          log = new StreamWriter(File.Open(Path.Combine(Launcher.RootDirectory, LogFilePath), FileMode.Create, FileAccess.Write, FileShare.Read), Encoding.UTF8);
          DateTime now = DateTime.Now;
+         this.mres = mres;
          log.Log(now.ToString("F", new CultureInfo("en-US")));
          log.Log("Dotnet Runtime Patcher by Meigyoku Thmn");
          log.Log($"Version {Launcher.CurrentVersion}");
@@ -34,9 +37,13 @@ namespace Launcher {
 
       private void UpdateForm_Load(object sender, EventArgs e) {
          // we delay this run a bit, so the async task can fully utilize the message loop of current UI thread
-         SetTimeout((_sender, _e) => RunCheckForUpdate(), 1); // zero delay will *not work*
+         SetTimeout((_sender, _e) => {
+            mres.Set();
+            RunCheckForUpdate();
+         }, 1); // zero delay will *not work*
       }
       WebClient wc;
+      ManualResetEventSlim mres;
       string id;
       string patchName;
       string packageName;
@@ -203,7 +210,7 @@ namespace Launcher {
 
       private void UpdateForm_FormClosed(object sender, FormClosedEventArgs e) {
          log.Close();
-         
+
       }
    }
 }

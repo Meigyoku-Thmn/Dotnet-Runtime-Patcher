@@ -16,12 +16,14 @@ using Sigil;
 using System.Threading;
 using System.Globalization;
 using System.Configuration;
+using System.Collections;
 
 namespace Launcher {
    using PatchTuple = ValueTuple<Type, string, Type[], Type, string, Type[]>;
    using TranspilerTuple = ValueTuple<Type, string, Type[], Type, string, Type[]>;
    public partial class Launcher {
       static public HarmonyInstance Harmony { get; private set; }
+      static public readonly string HarmonyId = "HARMONY_RUNTIME_PATCHER_INSTANCE";
       static public Assembly TargetAssembly { get; private set; }
       static public IReadOnlyDictionary<string, Assembly> ReferenceAssemblies { get; private set; }
       static public Icon TargetIcon { get; private set; }
@@ -53,6 +55,18 @@ namespace Launcher {
          log.Log(now.ToString("F", new CultureInfo("en-US")));
          log.Log("Dotnet Runtime Patcher by Meigyoku Thmn");
          log.Log($"Version {CurrentVersion}");
+
+         log.Log("Create Harmony Instance.");
+         Harmony = HarmonyInstance.Create(HarmonyId);
+#if DEBUG
+         var DebugBuild = true;
+#else
+         var DebugBuild = false;
+#endif
+         log.Log("Set up CSScript.");
+         CSScript.GlobalSettings.UseAlternativeCompiler = CodeDom_Roslyn.LocateRoslynCSSProvider();
+         CSScript.GlobalSettings.RoslynDir = CodeDom_Roslyn.LocateRoslynCompilers();
+         CSScript.EvaluatorConfig.DebugBuild = DebugBuild;
 
          log.Log($"Read {Path.Combine(ProfileDirectory, args[0] + ".jsonc")}");
          var exeCfg = JObject.Parse(File.ReadAllText(Path.Combine(ProfileDirectory, args[0] + ".jsonc")));
@@ -91,17 +105,6 @@ namespace Launcher {
                return acc;
             }
          );
-         log.Log("Create Harmony Instance.");
-         Harmony = HarmonyInstance.Create("HARMONY_RUNTIME_PATCHER_INSTANCE");
-#if DEBUG
-         var DebugBuild = true;
-#else
-         var DebugBuild = false;
-#endif
-         log.Log("Set up CSScript.");
-         CSScript.GlobalSettings.UseAlternativeCompiler = CodeDom_Roslyn.LocateRoslynCSSProvider();
-         CSScript.GlobalSettings.RoslynDir = CodeDom_Roslyn.LocateRoslynCompilers();
-         CSScript.EvaluatorConfig.DebugBuild = DebugBuild;
 
          var tmp = package.Split('/');
          var id = tmp[0];
@@ -110,6 +113,9 @@ namespace Launcher {
          log.Log("Begin loading patching script...");
          log.Log($"DebugMode = {DebugBuild}");
          log.Log($"Load {mainScriptPath}");
+         CSScriptHack.InjectObjectForPrecompilers(new Hashtable() {
+            { "Version", TargetVersion },
+         });
          var script = new AsmHelper(CSScript.LoadFile(mainScriptPath, null, DebugBuild));
          Directory.SetCurrentDirectory(TargetDirectory);
          log.Log("Call DotnetPatching.Config.OnInit");
@@ -129,6 +135,7 @@ namespace Launcher {
          log.Log("Launch the target executable...");
          TargetAssembly.EntryPoint.Invoke(null, new object[] { new string[] { } });
          log.Log("Enable updating.");
+         updateInfo.mres.Wait(); // wait for UpdaterForm to fully loaded 
          try {
             if (!updateInfo.form.IsDisposed) updateInfo.form.Invoke(new Action(() => {
                updateInfo.form.EnableUpdateButton();
@@ -142,19 +149,25 @@ namespace Launcher {
          log.Log("Dotnet Runtime Patcher main thread ends.");
          log.Close();
       }
-      static dynamic __currentReentrantMethod;
-      static List<dynamic> states = new List<dynamic>();
-      public delegate bool PrefixDelegate(ref dynamic __state);
+      static Delegate __currentReentrantMethod;
+      public class HMState {
+         public Delegate ReentrantDelegate;
+         public HMState(Delegate ReentrantDelegate) {
+            this.ReentrantDelegate = ReentrantDelegate;
+         }
+      }
+      static List<HMState> states = new List<HMState>();
+      public delegate bool PrefixDelegate(ref HMState __state);
       static DynamicMethod PrefixFactory(MethodBase method) {
-         states.Add(__currentReentrantMethod);
+         states.Add(new HMState(__currentReentrantMethod));
          var emit = Emit<PrefixDelegate>.NewDynamicMethod(method.Name + "_Prefix");
          var statesField = AccessTools.Field(typeof(Launcher), nameof(states));
          // [__state = Launcher.states[LoadConstant(__incrementNumber)]]
-         emit.LoadArgument(0);
-         emit.LoadField(statesField);
-         emit.LoadConstant(states.Count - 1);
-         emit.CallVirtual(AccessTools.Method(statesField.FieldType, "get_Item"));
-         emit.StoreIndirect(typeof(object));
+         emit.LoadArgument(0); // load __state param
+         emit.LoadField(statesField); // load states list
+         emit.LoadConstant(states.Count - 1); // load the last index of states list
+         emit.CallVirtual(AccessTools.Method(statesField.FieldType, "get_Item")); // get the last element of states list, after this, the stack looks like: [..., __state, <last elem>]
+         emit.StoreIndirect(typeof(HMState)); // __state = <last elem>, then pop both of them
          // [return false]
          emit.LoadConstant(false);
          emit.Return();
@@ -190,6 +203,7 @@ namespace Launcher {
          log.Log(args.ExceptionObject.ToString());
          log.Close();
          MessageBox.Show(args.ExceptionObject.ToString(), "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Hand);
+         // game over
       }
       private static Assembly ResolveEventHandler(object sender, ResolveEventArgs args) {
          var assemblies = AppDomain.CurrentDomain.GetAssemblies();
@@ -198,16 +212,18 @@ namespace Launcher {
          return result;
       }
       static UpdaterInfo RunUpdater(string id, string packageName, string patchName) {
-         var updateForm = new UpdateForm(id, packageName, patchName);
+         var mres = new ManualResetEventSlim(false);
+         var updateForm = new UpdateForm(id, packageName, patchName, mres);
          Thread t = new Thread(() => Application.Run(updateForm));
          t.Start();
-         return new UpdaterInfo(updateForm, t);
+         return new UpdaterInfo(updateForm, t, mres);
       }
       class UpdaterInfo {
          public UpdateForm form;
          public Thread thread;
-         public UpdaterInfo(UpdateForm form, Thread thread) {
-            this.form = form; this.thread = thread;
+         public ManualResetEventSlim mres;
+         public UpdaterInfo(UpdateForm form, Thread thread, ManualResetEventSlim mres) {
+            this.form = form; this.thread = thread; this.mres = mres;
          }
       }
    }
