@@ -46,12 +46,13 @@ namespace Configurator {
          log.Log($"Get server list from {SystemCfgUrl}\n");
          var systemCfgStr = wc.DownloadString(SystemCfgUrl);
          var systemCfg = JObject.Parse(systemCfgStr);
-         var servers = systemCfg["servers"].Aggregate(new List<JObject>(), (acc, serverUrl) => {
-            var serverUri = new Uri((string)serverUrl).Concat("server.jsonc");
+         var servers = systemCfg["servers"].Children<JProperty>().Aggregate(new List<JObject>(), (acc, server) => {
+            var serverUri = new Uri((string)server.Value).Concat("server.jsonc");
             try {
                var serverCfgStr = wc.DownloadString(serverUri);
                var serverCfg = JObject.Parse(serverCfgStr);
-               serverCfg["url"] = serverUrl;
+               serverCfg["url"] = serverUri.ToString();
+               serverCfg["id"] = server.Name;
                acc.Add(serverCfg);
             }
             catch (Exception err) {
