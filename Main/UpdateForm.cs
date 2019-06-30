@@ -9,11 +9,11 @@ using System.Linq;
 using System.Net;
 using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Windows.Forms;
-using static Launcher.Helper;
-namespace Launcher {
+using static RuntimePatcher.Helper;
+namespace RuntimePatcher {
    public partial class UpdateForm : Form {
+      protected override bool ShowWithoutActivation => true;
       static readonly string LogFilePath = ConfigurationManager.AppSettings["UpdaterLogFilePath"];
       internal StreamWriter log;
       public UpdateForm(string id, string packageName, string patchName, ManualResetEventSlim mres) {

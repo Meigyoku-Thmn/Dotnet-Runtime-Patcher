@@ -1,4 +1,4 @@
-﻿namespace Launcher {
+﻿namespace RuntimePatcher {
    partial class UpdateForm {
       /// <summary>
       /// Required designer variable.

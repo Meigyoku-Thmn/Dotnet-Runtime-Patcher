@@ -1,7 +1,5 @@
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Globalization;
@@ -10,9 +8,8 @@ using System.Linq;
 using System.Net;
 using System.Reflection;
 using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
-using static Launcher.Helper;
+using static RuntimePatcher.Helper;
 namespace Configurator {
    public class Program {
       static readonly string SystemCfgUrl = ConfigurationManager.AppSettings["SystemCfgUrl"];
@@ -39,7 +36,7 @@ namespace Configurator {
          log.Log(now.ToString("F", new CultureInfo("en-US")));
          log.Log("Configurator for Dotnet Runtime Patcher by Meigyoku Thmn");
          log.Log($"Version {Application.ProductVersion}");
-         Console.OutputEncoding = Encoding.Unicode;
+         Console.OutputEncoding = Encoding.UTF8;
          var wc = new WebClient { Encoding = Encoding.UTF8 };
          var desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
          // STEP 1: List all servers/packages, then ask user to select a package
@@ -185,7 +182,7 @@ namespace Configurator {
          var arguments = $"\"{defaultShortcutName}\"";
          CreateShortcut(
             Path.Combine(desktopPath, newShortcutName + ".lnk"),
-            typeof(Launcher.Helper).Assembly.Location,
+            typeof(RuntimePatcher.Helper).Assembly.Location,
             arguments,
             targetPath + ", 0"
          );
@@ -203,7 +200,12 @@ namespace Configurator {
          shortcut.Save();
       }
       private static void Unhandled(object sender, UnhandledExceptionEventArgs args) {
+#if DEBUG
          log.Log(args.ExceptionObject.ToString());
+#else
+         log.Log(args.ExceptionObject.ToString(), true);
+         Console.WriteLine((args.ExceptionObject as Exception).Message);
+#endif
          log.Close();
          Console.WriteLine("Press enter key to exit.");
          Console.ReadLine();

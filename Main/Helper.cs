@@ -1,12 +1,15 @@
-﻿using System;
+﻿using Harmony;
+using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Reflection.Emit;
 using System.Security.Cryptography;
 using System.Windows.Forms;
 
-namespace Launcher {
+namespace RuntimePatcher {
    public class TargetInfo {
       public string Hash;
       public long Size;
@@ -15,10 +18,10 @@ namespace Launcher {
       }
    }
    public static class Helper {
-      public static void Log(this TextWriter log, string str = null) {
+      public static void Log(this TextWriter log, string str = null, bool noPrint = false) {
          DateTime now = DateTime.Now;
          log.Write($"[{now.ToString("s")}] ");
-         Console.WriteLine(str);
+         if (!noPrint) Console.WriteLine(str);
          log.WriteLine(str);
       }
       public static Uri Concat(this Uri baseUri, params string[] uris) {
@@ -34,14 +37,6 @@ namespace Launcher {
             return new TargetInfo(BitConverter.ToString(checksum).Replace("-", String.Empty), stream.Length);
          }
       }
-      public static Delegate MakeDelegate(this MethodInfo method, object target = null) {
-         var tArgs = new List<Type>();
-         foreach (var param in method.GetParameters())
-            tArgs.Add(param.ParameterType);
-         tArgs.Add(method.ReturnType);
-         var delDecltype = Expression.GetDelegateType(tArgs.ToArray());
-         return method.CreateDelegate(delDecltype, target);
-      }
       public static Timer SetTimeout(Action<object, EventArgs> handler, int delay) {
          var timer = new Timer();
          timer.Interval = delay;
@@ -55,9 +50,84 @@ namespace Launcher {
          bool bOk = false;
          try { new FileInfo(path); bOk = true; }
          catch (ArgumentException) { }
-         catch (System.IO.PathTooLongException) { }
+         catch (PathTooLongException) { }
          catch (NotSupportedException) { }
          return bOk;
+      }
+      static int CtorCount = 0;
+      // TODO: do something for blank struct
+      public static DynamicMethod MakeMethod(this ConstructorInfo ctor) {
+         var paramTypes = ctor.GetParameters().Select(para => para.ParameterType).ToArray();
+         var method = new DynamicMethod(
+            $"New{ctor.Name}_{CtorCount++}", ctor.DeclaringType, paramTypes.ToArray(),
+            ctor.DeclaringType.Module
+         );
+         ILGenerator gen = method.GetILGenerator();
+         for (var i = 0; i < paramTypes.Length; i++)
+            gen.Emit(OpCodes.Ldarg, i);
+         gen.Emit(OpCodes.Newobj, ctor);
+         gen.Emit(OpCodes.Ret);
+         return method;
+      }
+      public delegate object GetHandler(object target = null);
+      static int PropCount = 0;
+      public static GetHandler MakeGetDelegate(this PropertyInfo property) {
+         var isStatic = property.GetMethod.IsStatic;
+         var isValueType = property.DeclaringType.IsValueType;
+         var isReturnValueType = property.PropertyType.IsValueType;
+         var method = new DynamicMethod(
+            $"Get_{property.DeclaringType.Name}.{property.Name}_{PropCount++}",
+            typeof(object), new Type[] { typeof(object) },
+            property.DeclaringType.Module
+         );
+         ILGenerator gen = method.GetILGenerator();
+         if (!isStatic) {
+            gen.Emit(OpCodes.Ldarg_0);
+            if (isValueType) {
+               gen.Emit(OpCodes.Unbox, property.DeclaringType);
+               gen.Emit(OpCodes.Call, property.GetMethod);
+            }
+            else {
+               gen.Emit(OpCodes.Callvirt, property.GetMethod);
+            }
+         }
+         else {
+            gen.Emit(OpCodes.Call, property.GetMethod);
+         }
+         if (isReturnValueType)
+            gen.Emit(OpCodes.Box, property.PropertyType);
+         gen.Emit(OpCodes.Ret);
+         return (GetHandler)method.CreateDelegate(typeof(GetHandler));
+      }
+      public static GetHandler MakeDelegate(this FieldInfo field) {
+         var isStatic = field.IsStatic;
+         var isValueType = field.DeclaringType.IsValueType;
+         var isReturnValueType = field.FieldType.IsValueType;
+         var method = new DynamicMethod(
+            $"Read_{field.DeclaringType.Name}.{field.Name}_{PropCount++}",
+            typeof(object), new Type[] { typeof(object) },
+            field.DeclaringType.Module
+         );
+         ILGenerator gen = method.GetILGenerator();
+         if (!isStatic) {
+            gen.Emit(OpCodes.Ldarg_0);
+            if (isValueType)
+               gen.Emit(OpCodes.Unbox_Any, field.DeclaringType);
+            gen.Emit(OpCodes.Ldfld, field);
+         }
+         else {
+            gen.Emit(OpCodes.Ldsfld, field);
+         }
+         if (isReturnValueType)
+            gen.Emit(OpCodes.Box, field.FieldType);
+         gen.Emit(OpCodes.Ret);
+         return (GetHandler)method.CreateDelegate(typeof(GetHandler));
+      }
+      public static FastInvokeHandler MakeDelegate(this MethodInfo method) {
+         if (method is DynamicMethod)
+            return Harmony.MethodInvoker.GetHandler((DynamicMethod)method, method.Module);
+         else
+            return Harmony.MethodInvoker.GetHandler(method);
       }
    }
 }

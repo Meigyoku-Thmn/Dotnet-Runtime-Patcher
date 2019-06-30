@@ -1,14 +1,9 @@
 ﻿using Harmony;
-using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
-using static Launcher.Helper;
-namespace Launcher {
+using static RuntimePatcher.Helper;
+namespace RuntimePatcher {
    internal static class CSScriptHack {
       private static ConstructorInfo HashtableC = AccessTools.Constructor(typeof(Hashtable), TypeL());
       private static MethodInfo PrecompileM = AccessTools.Method(
@@ -23,7 +18,7 @@ namespace Launcher {
          var deh = new Hashtable();
       }
       internal static void HashtableCtor(Hashtable __instance) {
-         var stackTrace = new StackTrace();
+         var stackTrace = new StackTrace(false);
          var stackFrame = stackTrace.GetFrames()[2];
          var method = stackFrame.GetMethod();
          if (method == PrecompileM) {
