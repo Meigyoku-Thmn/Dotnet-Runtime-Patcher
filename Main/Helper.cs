@@ -1,4 +1,4 @@
-﻿using Harmony;
+﻿using HarmonyLib;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -60,7 +60,7 @@ namespace RuntimePatcher {
          var paramTypes = ctor.GetParameters().Select(para => para.ParameterType).ToArray();
          var method = new DynamicMethod(
             $"New{ctor.Name}_{CtorCount++}", ctor.DeclaringType, paramTypes.ToArray(),
-            ctor.DeclaringType.Module
+            ctor.DeclaringType.Module, true
          );
          ILGenerator gen = method.GetILGenerator();
          for (var i = 0; i < paramTypes.Length; i++)
@@ -78,7 +78,7 @@ namespace RuntimePatcher {
          var method = new DynamicMethod(
             $"Get_{property.DeclaringType.Name}.{property.Name}_{PropCount++}",
             typeof(object), new Type[] { typeof(object) },
-            property.DeclaringType.Module
+            property.DeclaringType.Module, true
          );
          ILGenerator gen = method.GetILGenerator();
          if (!isStatic) {
@@ -106,7 +106,7 @@ namespace RuntimePatcher {
          var method = new DynamicMethod(
             $"Read_{field.DeclaringType.Name}.{field.Name}_{PropCount++}",
             typeof(object), new Type[] { typeof(object) },
-            field.DeclaringType.Module
+            field.DeclaringType.Module, true
          );
          ILGenerator gen = method.GetILGenerator();
          if (!isStatic) {
@@ -125,9 +125,9 @@ namespace RuntimePatcher {
       }
       public static FastInvokeHandler MakeDelegate(this MethodInfo method) {
          if (method is DynamicMethod)
-            return Harmony.MethodInvoker.GetHandler((DynamicMethod)method, method.Module);
+            return HarmonyLib.MethodInvoker.GetHandler((DynamicMethod)method, method.Module);
          else
-            return Harmony.MethodInvoker.GetHandler(method);
+            return HarmonyLib.MethodInvoker.GetHandler(method);
       }
    }
 }

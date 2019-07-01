@@ -1,6 +1,6 @@
 ﻿using CSScriptLibrary;
 using CSScriptNativeApi;
-using Harmony;
+using HarmonyLib;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections;
@@ -37,7 +37,7 @@ namespace RuntimePatcher {
          catch { }
       }
       static public readonly string HarmonyId = "HARMONY_RUNTIME_PATCHER_INSTANCE";
-      static public readonly HarmonyInstance Harmony = HarmonyInstance.Create(HarmonyId);
+      static public readonly Harmony Harmony = new Harmony(HarmonyId);
       static public Assembly TargetAssembly { get; private set; }
       static public IReadOnlyDictionary<string, Assembly> ReferenceAssemblies { get; private set; }
       static public Icon TargetIcon { get; private set; }
@@ -61,10 +61,6 @@ namespace RuntimePatcher {
          AppDomain.CurrentDomain.AssemblyResolve += ResolveEventHandler;
          Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
          AppDomain.CurrentDomain.UnhandledException += new UnhandledExceptionEventHandler(Unhandled);
-#if !DEBUG
-         Console.OutputEncoding = Encoding.Unicode;
-         Console.InputEncoding = Encoding.Unicode;
-#endif
          RootDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
          log = new StreamWriter(File.Open(Path.Combine(RootDirectory, LogFilePath), FileMode.Create, FileAccess.Write, FileShare.Read), Encoding.UTF8);
          PackageDirectory = Path.Combine(RootDirectory, "Pkg");
