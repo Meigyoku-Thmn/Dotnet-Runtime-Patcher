@@ -135,6 +135,10 @@ namespace RuntimePatcher {
          CSScriptHack.InjectObjectForPrecompilers(new Hashtable() {
             { "Version", TargetVersion },
          });
+         var package_dirs = new ScriptParser(mainScriptPath).ResolvePackages()
+                                                .Select(Path.GetDirectoryName)
+                                                .ToList();
+         package_dirs.ForEach(CSScript.GlobalSettings.AddSearchDir);
          var script = new AsmHelper(CSScript.LoadFile(mainScriptPath, null, DebugBuild));
          Directory.SetCurrentDirectory(TargetDirectory);
          log.Log("Call DotnetPatching.Config.OnInit");
@@ -184,7 +188,7 @@ namespace RuntimePatcher {
       static DynamicMethod PrefixFactory(MethodBase method) {
          states.Add(new HMState(__currentReentrantMethod));
          var dynMethod = new DynamicMethod(
-            method.Name + "_Prefix", typeof(bool), new[] { typeof(HMState).MakeByRefType() }, 
+            method.Name + "_Prefix", typeof(bool), new[] { typeof(HMState).MakeByRefType() },
             typeof(Launcher).Module
          );
          dynMethod.DefineParameter(1, ParameterAttributes.None, "__state");
