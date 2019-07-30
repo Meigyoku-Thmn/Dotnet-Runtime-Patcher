@@ -11,7 +11,7 @@ namespace RuntimePatcher {
       internal static object injectedObj = null;
       internal static void InjectObjectForPrecompilers(object obj) {
          injectedObj = obj;
-         Launcher.Harmony.Patch(
+         Launcher.HarmonyInst.Patch(
             HashtableC, null,
             new HarmonyMethod(AccessTools.Method(typeof(CSScriptHack), nameof(HashtableCtor)))
          );
@@ -23,7 +23,7 @@ namespace RuntimePatcher {
          var method = stackFrame.GetMethod();
          if (method == PrecompileM) {
             __instance.Add("TargetInfo", injectedObj);
-            Launcher.Harmony.Unpatch(HashtableC, HarmonyPatchType.All, Launcher.HarmonyId);
+            Launcher.HarmonyInst.Unpatch(HashtableC, HarmonyPatchType.All, Launcher.HarmonyId);
          }
       }
    }

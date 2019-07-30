@@ -19,8 +19,21 @@ using System.Windows.Forms;
 using static RuntimePatcher.Helper;
 
 namespace RuntimePatcher {
-   using PatchTuple = ValueTuple<Type, string, Type[], Type, string, Type[]>;
-   using TranspilerTuple = ValueTuple<Type, string, Type[], Type, string, Type[]>;
+   using PatchTuple = PatchInfo;
+   using TranspilerTuple = PatchInfo;
+   public class PatchInfo {
+      public MethodBase original;
+      public MethodInfo patchMethod;
+      public MethodInfo reentrantMethod;
+      public static PatchInfo PM(MethodBase original, MethodInfo patchMethod, MethodInfo reentrantMethod = null) {
+         return new PatchInfo(original, patchMethod, reentrantMethod);
+      }
+      public PatchInfo(MethodBase original, MethodInfo patchMethod, MethodInfo reentrantMethod) {
+         this.original = original;
+         this.patchMethod = patchMethod;
+         this.reentrantMethod = reentrantMethod;
+      }
+   }
    public partial class Launcher {
       public const uint PROCESS_CALLBACK_FILTER_ENABLED = 0x1;
       [DllImport("Kernel32.dll")]
@@ -37,7 +50,7 @@ namespace RuntimePatcher {
          catch { }
       }
       static public readonly string HarmonyId = "HARMONY_RUNTIME_PATCHER_INSTANCE";
-      static public readonly Harmony Harmony = new Harmony(HarmonyId);
+      static public readonly Harmony HarmonyInst = new Harmony(HarmonyId);
       static public Assembly TargetAssembly { get; private set; }
       static public IReadOnlyDictionary<string, Assembly> ReferenceAssemblies { get; private set; }
       static public Icon TargetIcon { get; private set; }
@@ -79,6 +92,7 @@ namespace RuntimePatcher {
          CSScript.GlobalSettings.RoslynDir = CodeDom_Roslyn.LocateRoslynCompilers();
          CSScript.EvaluatorConfig.DebugBuild = DebugBuild;
 
+
          log.Log($"Read {Path.Combine(ProfileDirectory, args[0] + ".jsonc")}");
          var exeCfg = JObject.Parse(File.ReadAllText(Path.Combine(ProfileDirectory, args[0] + ".jsonc")));
          var targetPath = (string)exeCfg["targetPath"];
@@ -116,7 +130,6 @@ namespace RuntimePatcher {
                return acc;
             }
          );
-
          var tmp = package.Split('/');
          var id = tmp[0];
          var packageName = tmp[1];
@@ -135,11 +148,14 @@ namespace RuntimePatcher {
          CSScriptHack.InjectObjectForPrecompilers(new Hashtable() {
             { "Version", TargetVersion },
          });
-         var package_dirs = new ScriptParser(mainScriptPath).ResolvePackages()
+         var package_dirs = new ScriptParser(mainScriptPath, null).ResolvePackages()
                                                 .Select(Path.GetDirectoryName)
                                                 .ToList();
          package_dirs.ForEach(CSScript.GlobalSettings.AddSearchDir);
-         var script = new AsmHelper(CSScript.LoadFile(mainScriptPath, null, DebugBuild));
+         var refAsms = ReferenceAssemblies.Select(asm => asm.Value.Location).ToArray();
+         refAsms = new string[0];
+         var script = new AsmHelper(CSScript.LoadFile(
+            mainScriptPath, null, DebugBuild, refAsms));
          Directory.SetCurrentDirectory(TargetDirectory);
          log.Log("Call DotnetPatching.Config.OnInit");
          dynamic status = script.GetStaticMethod("DotnetPatching.Config.OnInit")();
@@ -176,17 +192,13 @@ namespace RuntimePatcher {
          log.Log("Dotnet Runtime Patcher main thread ends.");
          log.Close();
       }
-      static FastInvokeHandler __currentReentrantMethod;
       public class HMState {
-         public FastInvokeHandler ReentrantDelegate;
-         public HMState(FastInvokeHandler ReentrantDelegate) {
-            this.ReentrantDelegate = ReentrantDelegate;
-         }
+         public HMState() { }
       }
       internal static List<HMState> states = new List<HMState>();
       public delegate bool PrefixDelegate(ref HMState __state);
       static DynamicMethod PrefixFactory(MethodBase method) {
-         states.Add(new HMState(__currentReentrantMethod));
+         states.Add(new HMState());
          var dynMethod = new DynamicMethod(
             method.Name + "_Prefix", typeof(bool), new[] { typeof(HMState).MakeByRefType() },
             typeof(Launcher).Module
@@ -207,26 +219,25 @@ namespace RuntimePatcher {
       }
       static void SetupHook(List<PatchTuple> PatchMethods) {
          foreach (var config in PatchMethods) {
-            var original = config.Item2 != ".ctor" ?
-               AccessTools.Method(config.Item1, config.Item2, config.Item3) :
-               AccessTools.Constructor(config.Item1, config.Item3) as MethodBase;
+            var original = config.original;
             var prefix = AccessTools.Method(typeof(Launcher), nameof(PrefixFactory));
-            var postfix = AccessTools.Method(config.Item4, config.Item5, config.Item6);
+            var postfix = config.patchMethod;
             if (postfix == null) throw new Exception($"Postfix for method {original.DeclaringType?.FullName + '.' + original.Name} is null!");
-            __currentReentrantMethod = Harmony.Patch(original).MakeDelegate();
             log.Log($"Hook method {original.DeclaringType?.FullName + '.' + original.Name}");
-            Harmony.Patch(original, new HarmonyMethod(prefix), new HarmonyMethod(postfix));
+            HarmonyInst.Patch(original, new HarmonyMethod(prefix), new HarmonyMethod(postfix));
+            if (config.reentrantMethod != null)
+               new ReversePatcher(HarmonyInst, original, config.reentrantMethod).Patch();
          }
       }
       static void SetupTranspiler(List<TranspilerTuple> allTranspilerConfigs) {
          foreach (var config in allTranspilerConfigs) {
-            var original = config.Item2 != ".ctor" ?
-               AccessTools.Method(config.Item1, config.Item2, config.Item3) :
-               AccessTools.Constructor(config.Item1, config.Item3) as MethodBase;
-            var transpiler = AccessTools.Method(config.Item4, config.Item5, config.Item6);
+            var original = config.original;
+            var transpiler = config.patchMethod;
             if (transpiler == null) throw new Exception($"Transpiler for method {original.DeclaringType?.FullName + '.' + original.Name} is null!");
             log.Log($"Transpile method {original.DeclaringType?.FullName + '.' + original.Name}");
-            var abc = Harmony.Patch(original, null, null, new HarmonyMethod(transpiler));
+            HarmonyInst.Patch(original, null, null, new HarmonyMethod(transpiler));
+            if (config.reentrantMethod != null)
+               new ReversePatcher(HarmonyInst, original, config.reentrantMethod).Patch();
          }
       }
       private static void Unhandled(object sender, UnhandledExceptionEventArgs args) {
