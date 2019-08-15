@@ -136,7 +136,7 @@ namespace RuntimePatcher {
          var mainScriptPath = Path.Combine(PackageDirectory, package, patchName, "Main.cs");
 #if DEBUG
          // for debugging purpose
-         mainScriptPath = @"C:\Touhou FDF\Touhou-Dotnet-Patches\lang-vi\thfdf\Main.cs";
+         mainScriptPath = @"C:\Touhou-Dotnet-Patches\lang-vi\thfdf\Main.cs";
 #endif
          log.Log("Begin loading patching script...");
          log.Log($"DebugMode = {DebugBuild}");

@@ -52,7 +52,7 @@ namespace RuntimePatcher {
       enum State { OnGoing, NoNeedToUpdate, CanUpdate, DidUpdated, Error };
       State state = State.OnGoing;
       bool appIsClose = false;
-      List<ValueTuple<string, string>> pickedUrl = new List<ValueTuple<string, string>>();
+      List<(string, string)> pickedUrl = new List<(string, string)>();
       string filesCfgStr;
       public async void RunCheckForUpdate() {
          try {
