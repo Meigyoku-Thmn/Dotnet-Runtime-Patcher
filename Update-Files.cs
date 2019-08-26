@@ -1,5 +1,3 @@
-//css_args -provider:%CSSCRIPT_DIR%\lib\CSSRoslynProvider.dll
-//css_ref %CSSCRIPT_DIR%\lib\Bin\Roslyn\System.ValueTuple.dll
 //css_nuget Crc32.NET
 //css_nuget Newtonsoft.Json
 using System;
