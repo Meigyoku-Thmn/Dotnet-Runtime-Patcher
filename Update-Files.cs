@@ -23,6 +23,7 @@ namespace MakeFileList {
             ;
          var filePaths = Directory.EnumerateFiles(DirPath, "*", SearchOption.AllDirectories)
             .Select(filePath => filePath.Replace('\\', '/'))
+            .OrderBy(filePath => filePath)
             .Where(
                filePath => filters.All(
                   filter => !filter.IsMatch(filePath)
