@@ -22,6 +22,7 @@ namespace MakeFileList {
             .ToArray()
             ;
          var filePaths = Directory.EnumerateFiles(DirPath, "*", SearchOption.AllDirectories)
+            .Select(filePath => filePath.Replace('\\', '/'))
             .Where(
                filePath => filters.All(
                   filter => !filter.IsMatch(filePath)
@@ -44,7 +45,7 @@ namespace MakeFileList {
          var serverCfg = JObject.Parse(File.ReadAllText(serverCfgPath));
          foreach (JProperty package in serverCfg["packages"]) {
             Console.WriteLine("Update file list for: " + package.Name);
-            var DirPath = Path.Combine(Directory.GetCurrentDirectory(), package.Name) + '\\';
+            var DirPath = Path.Combine(Directory.GetCurrentDirectory(), package.Name) + Path.DirectorySeparatorChar;
             CreateFileList(DirPath, Path.Combine(DirPath, ".fileignore"), Path.Combine(DirPath, "files.jsonc"));
          }
       }
