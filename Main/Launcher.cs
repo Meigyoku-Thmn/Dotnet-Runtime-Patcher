@@ -1,10 +1,12 @@
 ﻿using CSScriptLibrary;
 using CSScriptNativeApi;
 using HarmonyLib;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Configuration;
 using System.Drawing;
 using System.Globalization;
@@ -32,6 +34,26 @@ namespace RuntimePatcher {
          this.original = original;
          this.patchMethod = patchMethod;
          this.reentrantMethod = reentrantMethod;
+      }
+   }
+   [JsonObject(ItemNullValueHandling = NullValueHandling.Ignore)]
+   public class Options {
+      public bool UpdateOnStart { get; set; } = true;
+      public void Save() {
+         var json = JsonConvert.SerializeObject(this, Formatting.Indented);
+         File.WriteAllText(Path.Combine(RootDirectory, FileName), json);
+      }
+      private string RootDirectory;
+      private string FileName;
+      public Options(string RootDirectory, string OptionsFileName) {
+         this.RootDirectory = RootDirectory;
+         this.FileName = OptionsFileName;
+         try {
+            var json = File.ReadAllText(Path.Combine(RootDirectory, OptionsFileName));
+            JsonConvert.PopulateObject(json, this);
+         }
+         catch (Exception ex) when (ex is FileNotFoundException || ex is DirectoryNotFoundException) {
+         }
       }
    }
    public partial class Launcher {
@@ -87,6 +109,8 @@ namespace RuntimePatcher {
 #else
          var DebugBuild = false;
 #endif
+         var options = new Options(RootDirectory, "Options.jsonc");
+         options.Save();
          log.Log("Set up CSScript.");
          CSScript.GlobalSettings.UseAlternativeCompiler = CodeDom_Roslyn.LocateRoslynCSSProvider();
          CSScript.GlobalSettings.RoslynDir = CodeDom_Roslyn.LocateRoslynCompilers();
@@ -142,7 +166,7 @@ namespace RuntimePatcher {
          log.Log($"DebugMode = {DebugBuild}");
 #if !DEBUG
          log.Log("Run Updater...");
-         var updateInfo = RunUpdater(id, packageName, patchName);
+         UpdaterInfo updateInfo = options.UpdateOnStart ? RunUpdater(id, packageName, patchName) : null;
 #endif
          log.Log($"Load {mainScriptPath}");
          CSScriptHack.InjectObjectForPrecompilers(new Hashtable() {
@@ -177,17 +201,19 @@ namespace RuntimePatcher {
          TargetAssembly.EntryPoint.Invoke(null, new object[] { new string[] { } });
          log.Log("Enable updating.");
 #if !DEBUG
-         updateInfo.mres.Wait(); // wait for UpdaterForm to fully loaded 
-         try {
-            if (!updateInfo.form.IsDisposed) updateInfo.form.Invoke(new Action(() => {
-               updateInfo.form.EnableUpdateButton();
-            }));
+         if (updateInfo != null) {
+            updateInfo.mres.Wait(); // wait for UpdaterForm to fully loaded 
+            try {
+               if (!updateInfo.form.IsDisposed) updateInfo.form.Invoke(new Action(() => {
+                  updateInfo.form.EnableUpdateButton();
+               }));
+            }
+            catch (InvalidOperationException) {
+               if (updateInfo.form.IsHandleCreated) throw;
+            }
+            log.Log("Wait for updater to complete.");
+            updateInfo.thread.Join();
          }
-         catch (InvalidOperationException) {
-            if (updateInfo.form.IsHandleCreated) throw;
-         }
-         log.Log("Wait for updater to complete.");
-         updateInfo.thread.Join();
 #endif
          log.Log("Dotnet Runtime Patcher main thread ends.");
          log.Close();
