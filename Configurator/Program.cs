@@ -1,6 +1,7 @@
 ﻿using Newtonsoft.Json.Linq;
 using ShellProgressBar;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Globalization;
@@ -9,6 +10,7 @@ using System.Linq;
 using System.Net;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using static RuntimePatcher.Helper;
@@ -142,44 +144,55 @@ namespace Configurator {
             log.Log("Local file list doesn't exist.");
             oldFiles = new JObject();
          }
+         Console.Clear();
+         Console.WriteLine(); // for some reason, on some computers, the first line of console is updated very slow, so I just leave the first line alone
          var writeCount = 0;
          var skipCount = 0;
          int totalTicks = files.Count();
          var options = new ProgressBarOptions {
-            ProgressCharacter = '─',
+            BackgroundCharacter = '\u2593',
             ProgressBarOnBottom = true,
+            EnableTaskBarProgress = true,
+            ForegroundColor = ConsoleColor.Yellow,
+            ForegroundColorDone = ConsoleColor.Green,
+            BackgroundColor = ConsoleColor.DarkGray,
          };
          var childOptions = new ProgressBarOptions {
-            ProgressCharacter = '─',
+            BackgroundCharacter = '\u2593',
             ProgressBarOnBottom = true,
+            ForegroundColor = ConsoleColor.Yellow,
+            ForegroundColorDone = ConsoleColor.Green,
+            BackgroundColor = ConsoleColor.DarkGray,
          };
-         Func<Task> startDownload = async () => {
-            using (var pbar = new SProgressBar(totalTicks, "Files downloading progress", options)) {
-               pbar.Tick($"0/{totalTicks}");
-               foreach (var file in files) {
-                  var oldChecksum = oldFiles[file.Name];
-                  if (oldChecksum != null && (uint)file.Value == (uint)oldChecksum) {
-                     skipCount++;
-                     continue;
-                  }
-                  var fileUri = new Uri(selectedPackage.ServerUrl).Concat(selectedPackage.Name, file.Name);
-                  var filePath = Path.Combine(localPackageDirPath, selectedPackage.Id, selectedPackage.Name, file.Name);
-                  log.Log(fileUri.ToString(), true);
-                  Directory.CreateDirectory(Path.GetDirectoryName(filePath));
+         var mainMessage = "Files downloading progress";
+         using (var pbar = new SProgressBar(totalTicks, mainMessage, options)) {
+            pbar.Tick(0, $"0/{totalTicks}");
+            // use 5 connection as the maximium, unless you want your whole country blocked by github
+            Parallel.ForEach(Partitioner.Create(files, EnumerablePartitionerOptions.NoBuffering), new ParallelOptions() { MaxDegreeOfParallelism = 5 }, (file) => {
+               var oldChecksum = oldFiles[file.Name];
+               if (oldChecksum != null && (uint)file.Value == (uint)oldChecksum) {
+                  pbar.Tick($"{pbar.CurrentTick + 1}/{totalTicks} {mainMessage}");
+                  Interlocked.Increment(ref skipCount);
+                  return;
+               }
+               var fileUri = new Uri(selectedPackage.ServerUrl).Concat(selectedPackage.Name, file.Name);
+               var filePath = Path.Combine(localPackageDirPath, selectedPackage.Id, selectedPackage.Name, file.Name);
+               log.Log(fileUri.ToString(), noPrint: true, useLock: true);
+               Directory.CreateDirectory(Path.GetDirectoryName(filePath));
+               new Func<Task>(async () => {
                   using (var child = pbar.Spawn(100, fileUri.ToString(), childOptions))
                   using (var wc = new WebClient { Encoding = Encoding.UTF8 }) {
+                     child.Tick(0);
                      wc.DownloadProgressChanged += (sender, e) => {
                         child.Tick(e.ProgressPercentage);
                      };
                      await wc.DownloadFileTaskAsync(fileUri, filePath);
                   }
-                  pbar.Tick($"{pbar.CurrentTick + 1}/{totalTicks}");
-                  writeCount++;
-               }
-            }
-         };
-         Console.Clear();
-         startDownload().Wait();
+               })().Wait();
+               pbar.Tick($"{pbar.CurrentTick + 1}/{totalTicks} {mainMessage}");
+               Interlocked.Increment(ref writeCount);
+            });
+         }
          log.Log($"Downloaded {writeCount} file(s)");
          log.Log($"Skipped {skipCount} file(s)");
          log.Log($"Write new file list to {oldFilesPath}");

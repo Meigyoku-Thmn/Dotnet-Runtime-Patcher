@@ -18,11 +18,15 @@ namespace RuntimePatcher {
       }
    }
    public static class Helper {
-      public static void Log(this TextWriter log, string str = null, bool noPrint = false) {
+      public static void Log(this TextWriter log, string str = null, bool noPrint = false, bool useLock = false) {
          DateTime now = DateTime.Now;
-         log.Write($"[{now.ToString("s")}] ");
          if (!noPrint) Console.WriteLine(str);
-         log.WriteLine(str);
+         Action writeLogToFile = () => {
+            log.Write($"[{now.ToString("s")}] ");
+            log.WriteLine(str);
+         };
+         if (useLock) lock (log) writeLogToFile();
+         else writeLogToFile();
       }
       public static Uri Concat(this Uri baseUri, params string[] uris) {
          return new Uri(baseUri, Path.Combine(uris));
