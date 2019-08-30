@@ -1,4 +1,5 @@
-using Newtonsoft.Json.Linq;
+﻿using Newtonsoft.Json.Linq;
+using ShellProgressBar;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
@@ -8,8 +9,10 @@ using System.Linq;
 using System.Net;
 using System.Reflection;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using static RuntimePatcher.Helper;
+using SProgressBar = ShellProgressBar.ProgressBar;
 namespace Configurator {
    public class Program {
       static readonly string SystemCfgUrl = ConfigurationManager.AppSettings["SystemCfgUrl"];
@@ -37,16 +40,21 @@ namespace Configurator {
          log.Log("Configurator for Dotnet Runtime Patcher by Meigyoku Thmn");
          log.Log($"Version {Application.ProductVersion}");
          Console.OutputEncoding = Encoding.UTF8;
-         var wc = new WebClient { Encoding = Encoding.UTF8 };
          var desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
          // STEP 1: List all servers/packages, then ask user to select a package
          log.Log($"Get server list from {SystemCfgUrl}\n");
-         var systemCfgStr = wc.DownloadString(SystemCfgUrl);
+         string systemCfgStr;
+         using (var wc = new WebClient { Encoding = Encoding.UTF8 }) {
+            systemCfgStr = wc.DownloadString(SystemCfgUrl);
+         }
          var systemCfg = JObject.Parse(systemCfgStr);
          var servers = systemCfg["servers"].Children<JProperty>().Aggregate(new List<JObject>(), (acc, server) => {
             var serverUri = new Uri((string)server.Value).Concat("server.jsonc");
             try {
-               var serverCfgStr = wc.DownloadString(serverUri);
+               string serverCfgStr;
+               using (var wc = new WebClient { Encoding = Encoding.UTF8 }) {
+                  serverCfgStr = wc.DownloadString(serverUri);
+               }
                var serverCfg = JObject.Parse(serverCfgStr);
                serverCfg["url"] = serverUri.ToString();
                serverCfg["id"] = server.Name;
@@ -97,7 +105,10 @@ namespace Configurator {
          log.Log($"  Id = {selectedPackage.Id}");
          log.Log($"  ServerUrl = {selectedPackage.ServerUrl}");
          var versionUri = new Uri(selectedPackage.ServerUrl).Concat(selectedPackage.Name, "versions.jsonc");
-         var versionCfgStr = wc.DownloadString(versionUri);
+         string versionCfgStr;
+         using (var wc = new WebClient { Encoding = Encoding.UTF8 }) {
+            versionCfgStr = wc.DownloadString(versionUri);
+         }
          var versionCfg = JObject.Parse(versionCfgStr);
          var targetVersion = versionCfg[targetInfo.Hash];
          if (targetVersion == null || (long)targetVersion["size"] != targetInfo.Size) {
@@ -115,7 +126,10 @@ namespace Configurator {
          }
          var patchRoot = patchName + '/';
          var filesUri = new Uri(selectedPackage.ServerUrl).Concat(selectedPackage.Name, "files.jsonc");
-         var filesCfgStr = wc.DownloadString(filesUri);
+         string filesCfgStr;
+         using (var wc = new WebClient { Encoding = Encoding.UTF8 }) {
+            filesCfgStr = wc.DownloadString(filesUri);
+         }
          var filesCfg = JObject.Parse(filesCfgStr);
          var files = filesCfg.Children<JProperty>().Where(file => file.Name.IndexOf(patchRoot, 0, patchRoot.Length) != -1);
          var oldFilesPath = Path.Combine(localPackageDirPath, selectedPackage.Id, selectedPackage.Name, "files.jsonc");
@@ -130,19 +144,42 @@ namespace Configurator {
          }
          var writeCount = 0;
          var skipCount = 0;
-         foreach (var file in files) {
-            var oldChecksum = oldFiles[file.Name];
-            if (oldChecksum != null && (uint)file.Value == (uint)oldChecksum) {
-               skipCount++;
-               continue;
+         int totalTicks = files.Count();
+         var options = new ProgressBarOptions {
+            ProgressCharacter = '─',
+            ProgressBarOnBottom = true,
+         };
+         var childOptions = new ProgressBarOptions {
+            ProgressCharacter = '─',
+            ProgressBarOnBottom = true,
+         };
+         Func<Task> startDownload = async () => {
+            using (var pbar = new SProgressBar(totalTicks, "Files downloading progress", options)) {
+               pbar.Tick($"0/{totalTicks}");
+               foreach (var file in files) {
+                  var oldChecksum = oldFiles[file.Name];
+                  if (oldChecksum != null && (uint)file.Value == (uint)oldChecksum) {
+                     skipCount++;
+                     continue;
+                  }
+                  var fileUri = new Uri(selectedPackage.ServerUrl).Concat(selectedPackage.Name, file.Name);
+                  var filePath = Path.Combine(localPackageDirPath, selectedPackage.Id, selectedPackage.Name, file.Name);
+                  log.Log(fileUri.ToString(), true);
+                  Directory.CreateDirectory(Path.GetDirectoryName(filePath));
+                  using (var child = pbar.Spawn(100, fileUri.ToString(), childOptions))
+                  using (var wc = new WebClient { Encoding = Encoding.UTF8 }) {
+                     wc.DownloadProgressChanged += (sender, e) => {
+                        child.Tick(e.ProgressPercentage);
+                     };
+                     await wc.DownloadFileTaskAsync(fileUri, filePath);
+                  }
+                  pbar.Tick($"{pbar.CurrentTick + 1}/{totalTicks}");
+                  writeCount++;
+               }
             }
-            var fileUri = new Uri(selectedPackage.ServerUrl).Concat(selectedPackage.Name, file.Name);
-            var filePath = Path.Combine(localPackageDirPath, selectedPackage.Id, selectedPackage.Name, file.Name);
-            log.Log(fileUri.ToString());
-            Directory.CreateDirectory(Path.GetDirectoryName(filePath));
-            wc.DownloadFile(fileUri, filePath);
-            writeCount++;
-         }
+         };
+         Console.Clear();
+         startDownload().Wait();
          log.Log($"Downloaded {writeCount} file(s)");
          log.Log($"Skipped {skipCount} file(s)");
          log.Log($"Write new file list to {oldFilesPath}");
