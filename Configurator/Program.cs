@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json.Linq;
+﻿using CommandLine;
+using Newtonsoft.Json.Linq;
 using ShellProgressBar;
 using System;
 using System.Collections.Concurrent;
@@ -15,6 +16,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using static RuntimePatcher.Helper;
 using SProgressBar = ShellProgressBar.ProgressBar;
+using ConfiguratorInputOptions = RuntimePatcher.ConfiguratorInputOptions;
 namespace Configurator {
    public class Program {
       static readonly string SystemCfgUrl = ConfigurationManager.AppSettings["SystemCfgUrl"];
@@ -32,6 +34,8 @@ namespace Configurator {
       static StreamWriter log;
       [STAThread]
       public static void Main(string[] args) {
+         ShellProgressBarHack.PatchExcerptFunc();
+
          var rootPath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
          log = new StreamWriter(File.Open(Path.Combine(rootPath, LogFilePath), FileMode.Create, FileAccess.Write, FileShare.Read), Encoding.UTF8);
          var localPackageDirPath = Path.Combine(rootPath, "Pkg");
@@ -43,6 +47,30 @@ namespace Configurator {
          log.Log($"Version {Application.ProductVersion}");
          Console.OutputEncoding = Encoding.UTF8;
          var desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+
+         ConfiguratorInputOptions InputOptions = new ConfiguratorInputOptions();
+         IEnumerable<Error> InputErrors = new Error[0];
+         Parser.Default.ParseArguments<ConfiguratorInputOptions>(args)
+                  .WithNotParsed((errors) => InputErrors = errors)
+                  .WithParsed(o => InputOptions = o);
+         if (InputErrors.Count() > 0) {
+            log.Log("Invalid arg syntax!");
+            Environment.Exit(-1);
+         }
+         Package selectedPackage = new Package(null, null, null);
+         string targetPath = null;
+         if (InputOptions.Specify == true) {
+            if (InputOptions.Id == null || InputOptions.Name == null || InputOptions.ServerUrl == null || InputOptions.TargetPath == null) {
+               log.Log("Invalid arg syntax!");
+               Environment.Exit(-1);
+            }
+            selectedPackage.Id = InputOptions.Id;
+            selectedPackage.Name = InputOptions.Name;
+            selectedPackage.ServerUrl = InputOptions.ServerUrl;
+            targetPath = InputOptions.TargetPath;
+            goto BeforeStep3;
+         }
+
          // STEP 1: List all servers/packages, then ask user to select a package
          log.Log($"Get server list from {SystemCfgUrl}\n");
          string systemCfgStr;
@@ -81,7 +109,7 @@ namespace Configurator {
          int selectedIndex;
          while (!int.TryParse(Console.ReadLine(), out selectedIndex) || (selectedIndex > count - 1 || selectedIndex < 0)) ;
          log.WriteLine(selectedIndex);
-         var selectedPackage = packages[selectedIndex];
+         selectedPackage = packages[selectedIndex];
          if (selectedPackage.Id.IndexOf('/') != -1 || selectedPackage.Name.IndexOf('/') != -1 || selectedPackage.Id.IndexOf('\\') != -1 || selectedPackage.Name.IndexOf('\\') != -1) {
             log.Log($"Package name ({selectedPackage.Name}) or package id ({selectedPackage.Id}) has slash character, our system cannot allow such character.");
             return;
@@ -96,7 +124,9 @@ namespace Configurator {
          openFileDg.CheckPathExists = true;
          var dialogRs = openFileDg.ShowDialog();
          if (dialogRs == DialogResult.Cancel) return;
-         var targetPath = openFileDg.FileName;
+         targetPath = openFileDg.FileName;
+
+BeforeStep3:
          log.Log(targetPath);
          var targetInfo = GetChecksumAndSize(targetPath);
 
@@ -202,6 +232,9 @@ namespace Configurator {
          log.Log($"Write {versionsPath}");
          Directory.CreateDirectory(Path.GetDirectoryName(versionsPath));
          File.WriteAllText(versionsPath, versionCfgStr);
+
+         if (InputOptions.Specify == true) goto AfterAllSteps;
+
          var urlFilePath = Path.Combine(localPackageDirPath, selectedPackage.Id, "urls.jsonc");
          var urlFileCfg = new JObject();
          urlFileCfg["serverUrl"] = selectedPackage.ServerUrl;
@@ -237,6 +270,8 @@ namespace Configurator {
             targetPath + ", 0"
          );
          log.Log("Created a shortcut on desktop.");
+
+AfterAllSteps:
          log.Log("\nAll done! Press enter to exit this wizard.");
          log.Close();
          Console.ReadLine();

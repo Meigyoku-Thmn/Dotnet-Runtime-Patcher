@@ -109,6 +109,16 @@ namespace RuntimePatcher {
 #else
          var DebugBuild = false;
 #endif
+         var pd = new ProgressDialog(IntPtr.Zero);
+         pd.Title = "Đang tải dữ liệu";
+         pd.Maximum = 100;
+         pd.Value = 0;
+         pd.Line1 = "Thiết đặt CSScript";
+         pd.Line2 = "Xin vui lòng chờ trong giây lát...";
+         pd.Line3 = " ";
+         pd.ShowDialog(ProgressDialog.PROGDLG.Modal, ProgressDialog.PROGDLG.NoMinimize);
+         Thread.Sleep(5000);
+
          var options = new Options(RootDirectory, "Options.jsonc");
          options.Save();
          log.Log("Set up CSScript.");
@@ -164,10 +174,14 @@ namespace RuntimePatcher {
 #endif
          log.Log("Begin loading patching script...");
          log.Log($"DebugMode = {DebugBuild}");
-#if !DEBUG
+#if !DdEBUG
          log.Log("Run Updater...");
-         UpdaterInfo updateInfo = options.UpdateOnStart ? RunUpdater(id, packageName, patchName) : null;
+         var updater = options.UpdateOnStart ? new Updater(targetPath, id, packageName, patchName, RootDirectory, PackageDirectory, options) : null;
+         var updatingTask = updater?.RunAsync();
 #endif
+         pd.Value = 10;
+         pd.Line1 = "Biên dịch tệp script";
+
          log.Log($"Load {mainScriptPath}");
          CSScriptHack.InjectObjectForPrecompilers(new Hashtable() {
             { "Version", TargetVersion },
@@ -181,38 +195,51 @@ namespace RuntimePatcher {
          var script = new AsmHelper(CSScript.LoadFile(
             mainScriptPath, null, DebugBuild, refAsms));
          Directory.SetCurrentDirectory(TargetDirectory);
+
+         pd.Value = 20;
+         pd.CloseDialog();
          log.Log("Call DotnetPatching.Config.OnInit");
          dynamic status = script.GetStaticMethod("DotnetPatching.Config.OnInit")();
-         if (status == false) {
-            log.Close();
-            return;
-         }
+         if (status == false) goto EnableUpdateButtonStep;
+         pd = new ProgressDialog(IntPtr.Zero);
+         pd.Title = "Đang tải dữ liệu";
+         pd.Maximum = 100;
+         pd.Value = 0;
+         pd.Line1 = "Thiết đặt Harmony";
+         pd.Line2 = "Xin vui lòng chờ trong giây lát...";
+         pd.Line3 = " ";
+         pd.ShowDialog(ProgressDialog.PROGDLG.Modal, ProgressDialog.PROGDLG.NoMinimize);
+         pd.Value = 30;
          log.Log("Call DotnetPatching.Detours.OnSetup");
          var OnSetup = script.GetStaticMethod("DotnetPatching.Detours.OnSetup");
          var detourList = (List<PatchTuple>)OnSetup();
          log.Log("Call DotnetPatching.Transpilers.OnSetup");
          OnSetup = script.GetStaticMethod("DotnetPatching.Transpilers.OnSetup");
          var transpilerList = (List<TranspilerTuple>)OnSetup();
+         var total = detourList.Count + transpilerList.Count;
          log.Log("Begin setting up Detour Functions...");
-         SetupHook(detourList);
+         pd.Line2 = "Setting up Detour Functions";
+         SetupHook(detourList, (count, message) => {
+            pd.Line3 = message;
+            pd.Value = (uint)(30 + 70 * count / total);
+         });
          log.Log("Begin setting up Transpilers to modify functions...");
-         SetupTranspiler(transpilerList);
+         SetupTranspiler(transpilerList, (count, message) => {
+            pd.Line3 = message;
+            pd.Value = (uint)(30 + 70 * count / total);
+         });
          log.Log("Launch the target executable...");
+         pd.Value = 100;
+         pd.CloseDialog();
          TargetAssembly.EntryPoint.Invoke(null, new object[] { new string[] { } });
+EnableUpdateButtonStep:
          log.Log("Enable updating.");
-#if !DEBUG
-         if (updateInfo != null) {
-            updateInfo.mres.Wait(); // wait for UpdaterForm to fully loaded 
-            try {
-               if (!updateInfo.form.IsDisposed) updateInfo.form.Invoke(new Action(() => {
-                  updateInfo.form.EnableUpdateButton();
-               }));
-            }
-            catch (InvalidOperationException) {
-               if (updateInfo.form.IsHandleCreated) throw;
-            }
+#if !DEfBUG
+         if (updatingTask != null) {
+            updater.EnableUpdateButton();
             log.Log("Wait for updater to complete.");
-            updateInfo.thread.Join();
+            updatingTask.Wait();
+            updater.Close();
          }
 #endif
          log.Log("Dotnet Runtime Patcher main thread ends.");
@@ -243,28 +270,38 @@ namespace RuntimePatcher {
          gen.Emit(OpCodes.Ret);
          return dynMethod;
       }
-      static void SetupHook(List<PatchTuple> PatchMethods) {
+      static void SetupHook(List<PatchTuple> PatchMethods, Action<int, string> reportFunc = null) {
+         int count = 0;
          foreach (var config in PatchMethods) {
             var original = config.original;
             var prefix = AccessTools.Method(typeof(Launcher), nameof(PrefixFactory));
             var postfix = config.patchMethod;
             if (postfix == null) throw new Exception($"Postfix for method {original.DeclaringType?.FullName + '.' + original.Name} is null!");
-            log.Log($"Hook method {original.DeclaringType?.FullName + '.' + original.Name}");
+            var message = $"Hook method {original.DeclaringType?.FullName + '.' + original.Name}";
+            log.Log(message);
+            reportFunc?.Invoke(count, message);
             HarmonyInst.Patch(original, new HarmonyMethod(prefix), new HarmonyMethod(postfix));
             if (config.reentrantMethod != null)
                new ReversePatcher(HarmonyInst, original, config.reentrantMethod).Patch();
+            count++;
          }
+         reportFunc?.Invoke(count, null);
       }
-      static void SetupTranspiler(List<TranspilerTuple> allTranspilerConfigs) {
+      static void SetupTranspiler(List<TranspilerTuple> allTranspilerConfigs, Action<int, string> reportFunc = null) {
+         var count = 0;
          foreach (var config in allTranspilerConfigs) {
             var original = config.original;
             var transpiler = config.patchMethod;
             if (transpiler == null) throw new Exception($"Transpiler for method {original.DeclaringType?.FullName + '.' + original.Name} is null!");
-            log.Log($"Transpile method {original.DeclaringType?.FullName + '.' + original.Name}");
+            var message = $"Transpile method {original.DeclaringType?.FullName + '.' + original.Name}";
+            log.Log(message);
+            reportFunc?.Invoke(count, message);
             HarmonyInst.Patch(original, null, null, new HarmonyMethod(transpiler));
             if (config.reentrantMethod != null)
                new ReversePatcher(HarmonyInst, original, config.reentrantMethod).Patch();
+            count++;
          }
+         reportFunc?.Invoke(count, null);
       }
       private static void Unhandled(object sender, UnhandledExceptionEventArgs args) {
 #if DEBUG
@@ -281,22 +318,6 @@ namespace RuntimePatcher {
          var assemblies = AppDomain.CurrentDomain.GetAssemblies();
          Assembly result = assemblies.Where(a => args.Name.Equals(a.FullName)).FirstOrDefault();
          return result;
-      }
-      static UpdaterInfo RunUpdater(string id, string packageName, string patchName) {
-         var mres = new ManualResetEventSlim(false);
-         var updateForm = new UpdateForm(id, packageName, patchName, mres);
-         updateForm.Icon = TargetIcon;
-         Thread t = new Thread(() => Application.Run(updateForm));
-         t.Start();
-         return new UpdaterInfo(updateForm, t, mres);
-      }
-      class UpdaterInfo {
-         public UpdateForm form;
-         public Thread thread;
-         public ManualResetEventSlim mres;
-         public UpdaterInfo(UpdateForm form, Thread thread, ManualResetEventSlim mres) {
-            this.form = form; this.thread = thread; this.mres = mres;
-         }
       }
    }
 }
