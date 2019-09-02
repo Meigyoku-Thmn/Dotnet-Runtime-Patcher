@@ -85,6 +85,7 @@ namespace RuntimePatcher {
       static internal StreamWriter log;
       static readonly string LogFilePath = ConfigurationManager.AppSettings["LogFilePath"];
       static void Main(string[] args) {
+         Helper.GetInputOptions(args);
          DisableUMCallbackFilter();
          Application.EnableVisualStyles();
          Application.SetCompatibleTextRenderingDefault(false);
@@ -97,7 +98,10 @@ namespace RuntimePatcher {
          Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
          AppDomain.CurrentDomain.UnhandledException += new UnhandledExceptionEventHandler(Unhandled);
          RootDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-         log = new StreamWriter(File.Open(Path.Combine(RootDirectory, LogFilePath), FileMode.Create, FileAccess.Write, FileShare.Read), Encoding.UTF8);
+         if (Settings.InputOptions?.LogPath == null)
+            log = StreamWriter.Null; // use a blackhole as log file
+         else
+            log = new StreamWriter(File.Open(Path.Combine(RootDirectory, Settings.InputOptions.LogPath), FileMode.Create, FileAccess.Write, FileShare.Read), Encoding.UTF8);
          PackageDirectory = Path.Combine(RootDirectory, "Pkg");
          ProfileDirectory = Path.Combine(RootDirectory, "Prfl");
          DateTime now = DateTime.Now;
@@ -176,7 +180,12 @@ namespace RuntimePatcher {
          log.Log($"DebugMode = {DebugBuild}");
 #if !DdEBUG
          log.Log("Run Updater...");
-         var updater = options.UpdateOnStart ? new Updater(targetPath, id, packageName, patchName, RootDirectory, PackageDirectory, options) : null;
+         bool createdNew;
+         var mutex = new Mutex(false, "Configurator {915b8730-1eb7-4314-896a-9f3e68906874}", out createdNew);
+         var updater = options.UpdateOnStart && createdNew ? new Updater(targetPath, id, packageName, patchName, RootDirectory, PackageDirectory, options) : null;
+         if (!createdNew) {
+            log.Log("An instance of Configurator or Updater is already running!");
+         }
          var updatingTask = updater?.RunAsync();
 #endif
          pd.Value = 10;
@@ -241,6 +250,7 @@ EnableUpdateButtonStep:
             updatingTask.Wait();
             updater.Close();
          }
+         mutex.Dispose();
 #endif
          log.Log("Dotnet Runtime Patcher main thread ends.");
          log.Close();

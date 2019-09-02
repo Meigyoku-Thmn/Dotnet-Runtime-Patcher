@@ -32,7 +32,10 @@ namespace RuntimePatcher {
          this.options = options;
          this.targetPath = targetPath;
          this.rootDirectory = rootDirectory;
-         log = new StreamWriter(File.Open(Path.Combine(rootDirectory, LogFilePath), FileMode.Create, FileAccess.Write, FileShare.Read), Encoding.UTF8);
+         if (Settings.InputOptions?.LogPath == null)
+            log = StreamWriter.Null; // use a blackhole as log file
+         else
+            log = new StreamWriter(File.Open(Path.Combine(rootDirectory, LogFilePath), FileMode.Create, FileAccess.Write, FileShare.Read), Encoding.UTF8);
          log.Log(DateTime.Now.ToString("F", new CultureInfo("en-US")));
          log.Log("Dotnet Runtime Patcher by Meigyoku Thmn");
          log.Log($"Version {Launcher.CurrentVersion}");

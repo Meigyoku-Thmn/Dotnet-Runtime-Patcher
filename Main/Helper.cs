@@ -1,4 +1,5 @@
-﻿using HarmonyLib;
+﻿using CommandLine;
+using HarmonyLib;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -17,7 +18,24 @@ namespace RuntimePatcher {
          this.Hash = Hash; this.Size = Size;
       }
    }
+   public static class Settings {
+      public static InputOptions InputOptions;
+   }
+   public class InputOptions {
+      [Option("log", Required = false, HelpText = "Enable logging.")]
+      public string LogPath { get; set; } = null;
+   }
    public static class Helper {
+      public static InputOptions GetInputOptions(string[] args) {
+         InputOptions InputOptions = null;
+         IEnumerable<Error> InputErrors = new Error[0];
+         Parser.Default.ParseArguments<InputOptions>(args)
+                  .WithNotParsed((errors) => InputErrors = errors)
+                  .WithParsed(o => InputOptions = o);
+         if (InputErrors.Count() > 0) throw new Exception("Invalid arg syntax");
+         Settings.InputOptions = InputOptions;
+         return InputOptions;
+      }
       public static void Log(this TextWriter log, string str = null, bool noPrint = false, bool useLock = false) {
          DateTime now = DateTime.Now;
          if (!noPrint) Console.WriteLine(str);

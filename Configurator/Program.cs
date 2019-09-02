@@ -32,8 +32,20 @@ namespace Configurator {
          }
       }
       static StreamWriter log;
+
       [STAThread]
       public static void Main(string[] args) {
+         bool createdNew;
+         using (var mutex = new Mutex(false, "Configurator {915b8730-1eb7-4314-896a-9f3e68906874}", out createdNew)) {
+            if (!createdNew) {
+               Console.WriteLine("An instance of Configurator or Updater is already running!");
+               Environment.Exit(-1);
+            }
+            Run(args);
+         }
+      }
+
+      public static void Run(string[] args) {
          ShellProgressBarHack.PatchExcerptFunc();
 
          var rootPath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
