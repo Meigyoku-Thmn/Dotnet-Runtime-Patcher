@@ -35,17 +35,29 @@ namespace Configurator {
 
       [STAThread]
       public static void Main(string[] args) {
+         ConfiguratorInputOptions InputOptions = new ConfiguratorInputOptions();
+         IEnumerable<Error> InputErrors = new Error[0];
+         Parser.Default.ParseArguments<ConfiguratorInputOptions>(args)
+                  .WithNotParsed(errors => InputErrors = errors)
+                  .WithParsed(o => InputOptions = o);
+         if (InputErrors.Count() > 0) {
+            log.Log("Invalid arg syntax!");
+            Environment.Exit(-1);
+         }
          bool createdNew;
-         using (var mutex = new Mutex(false, "Configurator {915b8730-1eb7-4314-896a-9f3e68906874}", out createdNew)) {
+         if (InputOptions.SharedLock == ConfigurationManager.AppSettings["SharedLock"]) {
+            Run(args, InputOptions);
+         }
+         else using (var mutex = new Mutex(false, ConfigurationManager.AppSettings["SharedLock"], out createdNew)) {
             if (!createdNew) {
                Console.WriteLine("An instance of Configurator or Updater is already running!");
                Environment.Exit(-1);
             }
-            Run(args);
+            Run(args, InputOptions);
          }
       }
 
-      public static void Run(string[] args) {
+      public static void Run(string[] args, ConfiguratorInputOptions InputOptions) {
          ShellProgressBarHack.PatchExcerptFunc();
 
          var rootPath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
@@ -59,16 +71,7 @@ namespace Configurator {
          log.Log($"Version {Application.ProductVersion}");
          Console.OutputEncoding = Encoding.UTF8;
          var desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-
-         ConfiguratorInputOptions InputOptions = new ConfiguratorInputOptions();
-         IEnumerable<Error> InputErrors = new Error[0];
-         Parser.Default.ParseArguments<ConfiguratorInputOptions>(args)
-                  .WithNotParsed((errors) => InputErrors = errors)
-                  .WithParsed(o => InputOptions = o);
-         if (InputErrors.Count() > 0) {
-            log.Log("Invalid arg syntax!");
-            Environment.Exit(-1);
-         }
+         
          Package selectedPackage = new Package(null, null, null);
          string targetPath = null;
          if (InputOptions.Specify == true) {

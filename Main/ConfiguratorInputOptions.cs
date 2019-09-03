@@ -17,5 +17,7 @@ namespace RuntimePatcher {
       public string ServerUrl { get; set; }
       [Option("path", Required = false, HelpText = "Target path.")]
       public string TargetPath { get; set; }
+      [Option("shrLock", Required = false, HelpText = "If you pass a correct mutex lock, the Configurator will not aquire any mutex.")]
+      public string SharedLock { get; set; }
    }
 }

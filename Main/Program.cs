@@ -181,7 +181,7 @@ namespace RuntimePatcher {
 #if !DdEBUG
          log.Log("Run Updater...");
          bool createdNew;
-         var mutex = new Mutex(false, "Configurator {915b8730-1eb7-4314-896a-9f3e68906874}", out createdNew);
+         var mutex = new Mutex(false, ConfigurationManager.AppSettings["SharedLock"], out createdNew);
          var updater = options.UpdateOnStart && createdNew ? new Updater(targetPath, id, packageName, patchName, RootDirectory, PackageDirectory, options) : null;
          if (!createdNew) {
             log.Log("An instance of Configurator or Updater is already running!");

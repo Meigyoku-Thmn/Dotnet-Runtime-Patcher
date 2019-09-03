@@ -199,6 +199,7 @@ namespace RuntimePatcher {
                Name = packageName,
                ServerUrl = serverUrl,
                TargetPath = targetPath,
+               SharedLock = ConfigurationManager.AppSettings["SharedLock"],
             };
             var arguments = Parser.Default.FormatCommandLine(inputOptions);
             Process.Start(Path.Combine(rootDirectory, ConfigurationManager.AppSettings["ConfiguratorName"]), arguments).WaitForExit();
