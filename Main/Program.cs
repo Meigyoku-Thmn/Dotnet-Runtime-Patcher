@@ -108,11 +108,7 @@ namespace RuntimePatcher {
          log.Log(now.ToString("F", new CultureInfo("en-US")));
          log.Log("Dotnet Runtime Patcher by Meigyoku Thmn");
          log.Log($"Version {CurrentVersion}");
-#if DEBUG
-         var DebugBuild = true;
-#else
-         var DebugBuild = false;
-#endif
+         var DebugBuild = Settings.InputOptions.Debug;
          var pd = new ProgressDialog(IntPtr.Zero);
          pd.Title = "Đang tải dữ liệu";
          pd.Maximum = 100;
@@ -178,16 +174,13 @@ namespace RuntimePatcher {
 #endif
          log.Log("Begin loading patching script...");
          log.Log($"DebugMode = {DebugBuild}");
-#if !DdEBUG
-         log.Log("Run Updater...");
-         bool createdNew;
-         var mutex = new Mutex(false, ConfigurationManager.AppSettings["SharedLock"], out createdNew);
+
+         var mutex = new Mutex(false, ConfigurationManager.AppSettings["SharedLock"], out bool createdNew);
          var updater = options.UpdateOnStart && createdNew ? new Updater(targetPath, id, packageName, patchName, RootDirectory, PackageDirectory, options) : null;
-         if (!createdNew) {
-            log.Log("An instance of Configurator or Updater is already running!");
-         }
+         if (!createdNew) log.Log("An instance of Configurator or Updater is already running!");
+         if (updater != null) log.Log("Run Updater...");
          var updatingTask = updater?.RunAsync();
-#endif
+
          pd.Value = 10;
          pd.Line1 = "Biên dịch tệp script";
 
@@ -243,7 +236,7 @@ namespace RuntimePatcher {
          TargetAssembly.EntryPoint.Invoke(null, new object[] { new string[] { } });
 EnableUpdateButtonStep:
          log.Log("Enable updating.");
-#if !DEfBUG
+
          if (updatingTask != null) {
             updater.EnableUpdateButton();
             log.Log("Wait for updater to complete.");
@@ -251,7 +244,7 @@ EnableUpdateButtonStep:
             updater.Close();
          }
          mutex.Dispose();
-#endif
+
          log.Log("Dotnet Runtime Patcher main thread ends.");
          log.Close();
       }

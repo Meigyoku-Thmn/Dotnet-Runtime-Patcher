@@ -24,6 +24,8 @@ namespace RuntimePatcher {
    public class InputOptions {
       [Option("log", Required = false, HelpText = "Enable logging.")]
       public string LogPath { get; set; } = null;
+      [Option("debug", Required = false, HelpText = "Enable debug mode.")]
+      public bool Debug { get; set; } = false;
    }
    public static class Helper {
       public static InputOptions GetInputOptions(string[] args) {

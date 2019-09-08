@@ -44,17 +44,16 @@ namespace Configurator {
             log.Log("Invalid arg syntax!");
             Environment.Exit(-1);
          }
-         bool createdNew;
          if (InputOptions.SharedLock == ConfigurationManager.AppSettings["SharedLock"]) {
             Run(args, InputOptions);
          }
-         else using (var mutex = new Mutex(false, ConfigurationManager.AppSettings["SharedLock"], out createdNew)) {
-            if (!createdNew) {
-               Console.WriteLine("An instance of Configurator or Updater is already running!");
-               Environment.Exit(-1);
+         else using (var mutex = new Mutex(false, ConfigurationManager.AppSettings["SharedLock"], out bool createdNew)) {
+               if (!createdNew) {
+                  Console.WriteLine("An instance of Configurator or Updater is already running!");
+                  Environment.Exit(-1);
+               }
+               Run(args, InputOptions);
             }
-            Run(args, InputOptions);
-         }
       }
 
       public static void Run(string[] args, ConfiguratorInputOptions InputOptions) {
